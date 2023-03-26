@@ -20,7 +20,7 @@ export interface FetchStore<T, V> extends StoreReadable<T> {
 interface FetchStoreOptions {
     logger: (...args: any[]) => void;
     afterCreate: (fetchStoreInstance: any) => void;
-    fetchSilentDefaultThresholdMs: number;
+    fetchOnceDefaultThresholdMs: number;
     onError: (e: any) => void;
     onSilentError: (e: any) => void;
 }
