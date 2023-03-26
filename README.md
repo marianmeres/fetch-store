@@ -3,6 +3,11 @@
 [Store](https://github.com/marianmeres/store) utility for collecting results and meta info
 of any type of async work. Typically used for http requests.
 
+## Install
+```shell
+$ npm i @marianmeres/fetch-store
+```
+
 ## Basic example
 
 ```javascript
