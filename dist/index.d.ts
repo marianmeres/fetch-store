@@ -17,12 +17,12 @@ export interface FetchStore<T, V> extends StoreReadable<T> {
     resetError: Function;
     getInternalDataStore: () => StoreLike<V>;
 }
-interface FetchStoreConfig {
+interface FetchStoreOptions {
     logger: (...args: any[]) => void;
     afterCreate: (fetchStoreInstance: any) => void;
     fetchSilentDefaultThresholdMs: number;
     onError: (e: any) => void;
     onSilentError: (e: any) => void;
 }
-export declare const createFetchStore: <T>(fetchWorker: (...args: any[]) => Promise<any>, initial?: T, dataFactory?: (raw: any, old?: any) => T, config?: Partial<FetchStoreConfig>) => FetchStore<FetchStoreValue<T>, T>;
+export declare const createFetchStore: <T>(fetchWorker: (...args: any[]) => Promise<any>, initial?: T, dataFactory?: (raw: any, old?: any) => T, options?: Partial<FetchStoreOptions>) => FetchStore<FetchStoreValue<T>, T>;
 export {};

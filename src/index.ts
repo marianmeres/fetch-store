@@ -27,7 +27,7 @@ export interface FetchStore<T, V> extends StoreReadable<T> {
 	getInternalDataStore: () => StoreLike<V>;
 }
 
-interface FetchStoreConfig {
+interface FetchStoreOptions {
 	logger: (...args) => void;
 	afterCreate: (fetchStoreInstance) => void;
 	// still overridable on each call
@@ -36,7 +36,7 @@ interface FetchStoreConfig {
 	onError: (e) => void;
 	onSilentError: (e) => void;
 }
-const DEFAULT_CONFIG: Partial<FetchStoreConfig> = {
+const DEFAULT_OPTIONS: Partial<FetchStoreOptions> = {
 	// 5 min default
 	fetchSilentDefaultThresholdMs: 300_000,
 };
@@ -47,11 +47,11 @@ export const createFetchStore = <T>(
 	fetchWorker: (...args) => Promise<any>,
 	initial: T = null,
 	dataFactory: (raw: any, old?: any) => T = null,
-	config: Partial<FetchStoreConfig> = null
+	options: Partial<FetchStoreOptions> = null
 ): FetchStore<FetchStoreValue<T>, T> => {
 	const { logger, onError, onSilentError, afterCreate, fetchSilentDefaultThresholdMs } = {
-		...DEFAULT_CONFIG,
-		...(config || {}),
+		...DEFAULT_OPTIONS,
+		...(options || {}),
 	};
 
 	const _log = (...a) => (isFn(logger) ? logger.apply(null, a) : undefined);
