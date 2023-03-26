@@ -31,14 +31,14 @@ interface FetchStoreOptions {
 	logger: (...args) => void;
 	afterCreate: (fetchStoreInstance) => void;
 	// still overridable on each call
-	fetchSilentDefaultThresholdMs: number;
+	fetchOnceDefaultThresholdMs: number;
 	// central error notifier feature
 	onError: (e) => void;
 	onSilentError: (e) => void;
 }
 const DEFAULT_OPTIONS: Partial<FetchStoreOptions> = {
 	// 5 min default
-	fetchSilentDefaultThresholdMs: 300_000,
+	fetchOnceDefaultThresholdMs: 300_000,
 };
 
 const isFn = (v) => typeof v === 'function';
@@ -49,7 +49,7 @@ export const createFetchStore = <T>(
 	dataFactory: (raw: any, old?: any) => T = null,
 	options: Partial<FetchStoreOptions> = null
 ): FetchStore<FetchStoreValue<T>, T> => {
-	const { logger, onError, onSilentError, afterCreate, fetchSilentDefaultThresholdMs } = {
+	const { logger, onError, onSilentError, afterCreate, fetchOnceDefaultThresholdMs } = {
 		...DEFAULT_OPTIONS,
 		...(options || {}),
 	};
@@ -132,7 +132,7 @@ export const createFetchStore = <T>(
 	// use falsey threshold to skip
 	const fetchOnce = async (
 		fetchArgs: any[] = [],
-		thresholdMs = fetchSilentDefaultThresholdMs
+		thresholdMs = fetchOnceDefaultThresholdMs
 	) => {
 		const { successCounter, isFetching, lastFetchStart } = _metaStore.get();
 
