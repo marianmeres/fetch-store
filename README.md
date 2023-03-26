@@ -38,8 +38,8 @@ const store = createFetchStore<T>(
     fetchWorker: (...args) => Promise<any>,
     // optional, initial `data` value of the store
     initial?: T = null,
-    // optional, used to modify data returned by fetchWorker... (e.g. for various
-	// data update strategies, like merge/deepmerge/set etc)
+    // optional, used to modify data returned by fetchWorker... (usefull for various
+    // data update strategies, like merge/deepmerge/set etc)
     dataFactory?: (raw: any, old?: any) => T = null,
     // options (see source)
     options? = null
