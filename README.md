@@ -71,7 +71,7 @@ store.fetch: (...args) => Promise<void>;
 // do the async work, but do not update meta
 store.fetchSilent: (...args) => Promise<void>;
 
-// fetch only once (if within threshold since last)
+// do the async work only once (if within threshold since last)
 store.fetchOnce: (args: any[], thresholdMs: number) => Promise<void>;
 
 // to reset internal meta store
