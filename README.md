@@ -1,7 +1,7 @@
 # @marianmeres/fetch-store
 
-[Store](https://github.com/marianmeres/store) utility for managing any type of async work.
-Typically used for http requests.
+[Store](https://github.com/marianmeres/store) utility for collecting results and meta info
+of any type of async work. Typically used for http requests.
 
 ## Basic example
 
