@@ -1,60 +1,61 @@
 {
-  "name": "@marianmeres/fetch-store",
-  "version": "1.0.3",
-  "description": "",
-  "type": "module",
-  "main": "./dist/index.cjs",
-  "module": "./dist/index.js",
-  "browser": "./dist/index.umd.js",
-  "exports": {
-    "require": "./dist/index.cjs",
-    "import": "./dist/index.js"
-  },
-  "files": [
-    "dist"
-  ],
-  "types": "./dist/index.d.ts",
-  "scripts": {
-    "clean": "rimraf dist/*",
-    "prettier": "prettier --write \"{src,tests}/**/*.{js,ts,json}\"",
-    "release": "release",
-    "test": "node --loader ts-node/esm tests/index.ts",
-    "test:watch": "nodemon --delay 0.5 -q -w \"src/**/*.*\" -w \"tests/**/*.*\" -x \"node --loader ts-node/esm tests/index.ts\" --",
-    "build": "npm run clean && rollup -c",
-    "dev": "npm run clean && rollup -c -w"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/marianmeres/fetch-store.git"
-  },
-  "keywords": [
-    "interval"
-  ],
-  "author": "Marian Meres <marian@meres.sk>",
-  "license": "MIT",
-  "bugs": {
-    "url": "https://github.com/marianmeres/ticker/issues"
-  },
-  "homepage": "https://github.com/marianmeres/ticker#readme",
-  "devDependencies": {
-    "@marianmeres/clog": "^1.0.0",
-    "@marianmeres/release": "^1.0.0",
-    "@marianmeres/test-runner": "^2.0.15",
-    "@rollup/plugin-commonjs": "^24.0.1",
-    "@rollup/plugin-node-resolve": "^15.0.1",
-    "@rollup/plugin-terser": "^0.4.0",
-    "@rollup/plugin-typescript": "^11.0.0",
-    "@types/node": "^18.15.1",
-    "mkdirp": "^2.1.5",
-    "nodemon": "^3.0.2",
-    "prettier": "^2.8.4",
-    "rimraf": "^4.4.0",
-    "rollup": "^3.19.1",
-    "ts-node": "^10.9.1",
-    "tslib": "^2.5.0",
-    "typescript": "^4.9.5"
-  },
-  "dependencies": {
-    "@marianmeres/store": "^1.2.0"
-  }
+	"name": "@marianmeres/fetch-store",
+	"version": "1.1.0",
+	"description": "",
+	"type": "module",
+	"main": "./dist/index.cjs",
+	"module": "./dist/index.js",
+	"browser": "./dist/index.umd.js",
+	"exports": {
+		"require": "./dist/index.cjs",
+		"import": "./dist/index.js"
+	},
+	"files": [
+		"dist"
+	],
+	"types": "./dist/index.d.ts",
+	"scripts": {
+		"clean": "rimraf dist/*",
+		"prettier": "prettier --write \"{src,tests}/**/*.{js,ts,json}\"",
+		"release": "release -v minor",
+		"release:patch": "release -v patch",
+		"test": "node --loader ts-node/esm tests/index.ts",
+		"test:watch": "nodemon --delay 0.5 -q -w \"src/**/*.*\" -w \"tests/**/*.*\" -x \"node --loader ts-node/esm tests/index.ts\" --",
+		"build": "npm run clean && rollup -c",
+		"dev": "npm run clean && rollup -c -w"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/marianmeres/fetch-store.git"
+	},
+	"keywords": [
+		"interval"
+	],
+	"author": "Marian Meres <marian@meres.sk>",
+	"license": "MIT",
+	"bugs": {
+		"url": "https://github.com/marianmeres/ticker/issues"
+	},
+	"homepage": "https://github.com/marianmeres/ticker#readme",
+	"devDependencies": {
+		"@marianmeres/clog": "^1.0.0",
+		"@marianmeres/release": "^1.0.0",
+		"@marianmeres/test-runner": "^2.0.15",
+		"@rollup/plugin-commonjs": "^24.0.1",
+		"@rollup/plugin-node-resolve": "^15.0.1",
+		"@rollup/plugin-terser": "^0.4.0",
+		"@rollup/plugin-typescript": "^11.0.0",
+		"@types/node": "^18.15.1",
+		"mkdirp": "^2.1.5",
+		"nodemon": "^3.0.2",
+		"prettier": "^2.8.4",
+		"rimraf": "^4.4.0",
+		"rollup": "^3.19.1",
+		"ts-node": "^10.9.1",
+		"tslib": "^2.5.0",
+		"typescript": "^4.9.5"
+	},
+	"dependencies": {
+		"@marianmeres/store": "^1.2.0"
+	}
 }
