@@ -18,9 +18,9 @@ export interface FetchStoreValue<T> extends FetchStoreMeta {
 }
 
 export interface FetchStore<T, V> extends StoreReadable<T> {
-	fetch: (...args) => Promise<void>;
-	fetchSilent: (...args) => Promise<void>;
-	fetchOnce: (args: any[], thresholdMs: number) => Promise<void>;
+	fetch: (...args) => Promise<V>;
+	fetchSilent: (...args) => Promise<V>;
+	fetchOnce: (args: any[], thresholdMs: number) => Promise<V>;
 	reset: Function;
 	resetError: Function;
 	// for manual hackings
@@ -43,10 +43,13 @@ const DEFAULT_OPTIONS: Partial<FetchStoreOptions> = {
 
 const isFn = (v) => typeof v === 'function';
 
+type DataFactory<T> = (raw: any, old?: any) => T;
+
+//
 export const createFetchStore = <T>(
 	fetchWorker: (...args) => Promise<any>,
 	initial: T = null,
-	dataFactory: (raw: any, old?: any) => T = null,
+	dataFactory: null | DataFactory<T> = null,
 	options: Partial<FetchStoreOptions> = null
 ): FetchStore<FetchStoreValue<T>, T> => {
 	const { logger, onError, onSilentError, afterCreate, fetchOnceDefaultThresholdMs } = {
@@ -78,13 +81,13 @@ export const createFetchStore = <T>(
 
 	// In this fetch store case, we want at least one subscription to always exist,
 	// because we want this ugly-non-store-like-practice to work (note no outer subscription):
-	// 		const s = createFetchStore(...)
-	// 		await s.fetch();
-	// 		s.get().data === 'something which fetchWorker returned'
+	//     const s = createFetchStore(...)
+	//     await s.fetch();
+	//     s.get().data === 'something which fetchWorker returned'
 	// But it still feels a bit hackish...
 	subscribe(() => null);
 
-	const fetch = async (...rest) => {
+	const fetch = async (...rest): Promise<T> => {
 		let data = _dataStore.get();
 		let meta = _metaStore.get();
 
@@ -116,13 +119,18 @@ export const createFetchStore = <T>(
 		});
 
 		if (lastFetchError && isFn(onError)) onError(lastFetchError);
+
+		// return fetched content as well...
+		return data;
 	};
 
 	// similar to fetch, except it does not touch meta... so it allows data update
 	// without fetching spinners (for example)
-	const fetchSilent = async (...rest) => {
+	const fetchSilent = async (...rest): Promise<T> => {
 		try {
-			_dataStore.set(_createData(await fetchWorker(...rest), _dataStore.get()));
+			let data = _createData(await fetchWorker(...rest), _dataStore.get());
+			_dataStore.set(data);
+			return data;
 		} catch (e) {
 			_log('silent fetch error', e);
 			if (isFn(onSilentError)) onSilentError(e);
@@ -133,7 +141,7 @@ export const createFetchStore = <T>(
 	const fetchOnce = async (
 		fetchArgs: any[] = [],
 		thresholdMs = fetchOnceDefaultThresholdMs
-	) => {
+	): Promise<T> => {
 		const { successCounter, isFetching, lastFetchStart } = _metaStore.get();
 
 		if (!Array.isArray(fetchArgs)) fetchArgs = [fetchArgs];
@@ -142,7 +150,7 @@ export const createFetchStore = <T>(
 			return await fetch(...fetchArgs);
 		}
 
-		// exired threshold?
+		// expired threshold?
 		if (
 			thresholdMs &&
 			!isFetching &&
