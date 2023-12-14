@@ -29,12 +29,13 @@ export interface FetchStore<T, V> extends StoreReadable<T> {
 
 interface FetchStoreOptions {
 	logger: (...args) => void;
-	afterCreate: (fetchStoreInstance) => void;
 	// still overridable on each call
 	fetchOnceDefaultThresholdMs: number;
 	// central error notifier feature
 	onError: (e) => void;
 	onSilentError: (e) => void;
+	// deprecated
+	afterCreate: (fetchStoreInstance) => void;
 }
 const DEFAULT_OPTIONS: Partial<FetchStoreOptions> = {
 	// 5 min default
@@ -179,7 +180,11 @@ export const createFetchStore = <T>(
 		getInternalDataStore: () => _dataStore,
 	};
 
-	if (isFn(afterCreate)) afterCreate(fetchStore);
+	// deprecated
+	if (isFn(afterCreate)) {
+		console.warn('`afterCreate` option is deprecated and will be removed');
+		afterCreate(fetchStore);
+	}
 
 	return fetchStore;
 };

@@ -19,10 +19,10 @@ export interface FetchStore<T, V> extends StoreReadable<T> {
 }
 interface FetchStoreOptions {
     logger: (...args: any[]) => void;
-    afterCreate: (fetchStoreInstance: any) => void;
     fetchOnceDefaultThresholdMs: number;
     onError: (e: any) => void;
     onSilentError: (e: any) => void;
+    afterCreate: (fetchStoreInstance: any) => void;
 }
 type DataFactory<T> = (raw: any, old?: any) => T;
 export declare const createFetchStore: <T>(fetchWorker: (...args: any[]) => Promise<any>, initial?: T, dataFactory?: DataFactory<T>, options?: Partial<FetchStoreOptions>) => FetchStore<FetchStoreValue<T>, T>;
