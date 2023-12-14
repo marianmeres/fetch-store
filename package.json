@@ -34,9 +34,9 @@
 	"author": "Marian Meres <marian@meres.sk>",
 	"license": "MIT",
 	"bugs": {
-		"url": "https://github.com/marianmeres/ticker/issues"
+		"url": "https://github.com/marianmeres/fetch-store/issues"
 	},
-	"homepage": "https://github.com/marianmeres/ticker#readme",
+	"homepage": "https://github.com/marianmeres/fetch-store#readme",
 	"devDependencies": {
 		"@marianmeres/clog": "^1.0.0",
 		"@marianmeres/release": "^1.0.0",

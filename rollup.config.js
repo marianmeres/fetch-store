@@ -2,41 +2,36 @@ import typescript from '@rollup/plugin-typescript';
 import resolve from '@rollup/plugin-node-resolve';
 import commonjs from '@rollup/plugin-commonjs';
 import terser from '@rollup/plugin-terser';
-import fs from "node:fs";
+import fs from 'node:fs';
 // import dts from "rollup-plugin-dts";
 
-const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'))
+const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
 
 export default [
 	// browser-friendly UMD build
 	{
 		input: 'src/index.ts',
 		output: {
-			name: 'ticker',
+			name: 'fetch-store',
 			file: pkg.browser,
-			format: 'umd'
+			format: 'umd',
 		},
 		plugins: [
-			resolve(),   // so Rollup can find `lodash`
-			commonjs(),  // so Rollup can convert `ms` to an ES module
+			resolve(), // so Rollup can find `lodash`
+			commonjs(), // so Rollup can convert `ms` to an ES module
 			typescript(), // so Rollup can convert TypeScript to JavaScript
 			terser(),
-		]
+		],
 	},
 
 	{
 		input: 'src/index.ts',
 		external: [],
-		plugins: [
-			typescript(),
-			commonjs(),
-			resolve(),
-			terser(),
-		],
+		plugins: [typescript(), commonjs(), resolve(), terser()],
 		output: [
 			{ file: pkg.main, format: 'cjs' },
-			{ file: pkg.module, format: 'es' }
-		]
+			{ file: pkg.module, format: 'es' },
+		],
 	},
 
 	// {
