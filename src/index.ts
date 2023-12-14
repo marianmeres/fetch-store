@@ -182,7 +182,7 @@ export const createFetchStore = <T>(
 
 	// deprecated
 	if (isFn(afterCreate)) {
-		console.warn('`afterCreate` option is deprecated and will be removed');
+		console?.warn?.('`afterCreate` option is deprecated and will be removed');
 		afterCreate(fetchStore);
 	}
 
