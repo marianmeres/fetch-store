@@ -4,6 +4,7 @@
 of any type of async work. Typically used for http requests.
 
 ## Install
+
 ```shell
 $ npm i @marianmeres/fetch-store
 ```
@@ -12,14 +13,13 @@ $ npm i @marianmeres/fetch-store
 
 ```javascript
 // foo-store.js
-const foo = createFetchStore(
-    async () => {
-         const r = await fetch('foo.json');
-         if (!r.ok) throw new Error('Not OK!');
-         return await r.json()
-    }
-);
+const foo = createFetchStore(async () => {
+	const r = await fetch('foo.json');
+	if (!r.ok) throw new Error('Not OK!');
+	return await r.json();
+});
 ```
+
 ```sveltehtml
 <!--FooComponent.svelte-->
 <script>
@@ -66,17 +66,17 @@ store.subscribe((v) => {
 // instance api
 
 // do the async work
-store.fetch: (...args) => Promise<void>;
+store.fetch(...args): Promise<T>;
 
 // do the async work, but do not update meta
-store.fetchSilent: (...args) => Promise<void>;
+store.fetchSilent(...args): Promise<T>;
 
 // do the async work only once (if within threshold since last)
-store.fetchOnce: (args: any[], thresholdMs: number) => Promise<void>;
+store.fetchOnce(args: any[], thresholdMs: number): Promise<void>;
 
 // to reset internal meta store
-store.reset: Function;
-store.resetError: Function;
+store.reset();
+store.resetError();
 
 // for manual hackings
 store.getInternalDataStore();

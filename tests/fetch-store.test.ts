@@ -7,7 +7,7 @@ import { createFetchStore } from '../src/index.js';
 
 const clog = createClog(path.basename(fileURLToPath(import.meta.url)));
 const suite = new TestRunner(path.basename(fileURLToPath(import.meta.url)));
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const sleep = (ms: any) => new Promise((r) => setTimeout(r, ms));
 
 suite.test('basic flow', async () => {
 	const s = createFetchStore(async () => ({ foo: 'baz' }), { foo: 'bar' });
@@ -38,9 +38,12 @@ suite.test('error handling works', async () => {
 			return true;
 		},
 		{ foo: 'bar' },
-		null,
-		{ onError: () => e++ }
+		null
 	);
+
+	const unsub = s.subscribe(({ lastFetchError }) => {
+		if (lastFetchError) e++;
+	});
 
 	await s.fetch();
 
@@ -55,6 +58,8 @@ suite.test('error handling works', async () => {
 	assert(s.get().successCounter === 1);
 
 	assert(e === 1);
+
+	unsub();
 });
 
 suite.test('reset error test', async () => {

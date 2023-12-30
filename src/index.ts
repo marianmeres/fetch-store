@@ -1,15 +1,17 @@
 import {
 	createDerivedStore,
 	createStore,
+	CreateStoreOptions,
 	StoreLike,
 	StoreReadable,
 } from '@marianmeres/store';
 
 export interface FetchStoreMeta {
 	isFetching: boolean;
-	lastFetchStart: Date;
-	lastFetchEnd: Date;
-	lastFetchError: Date;
+	lastFetchStart: Date | null;
+	lastFetchEnd: Date | null;
+	lastFetchError: Error | null;
+	lastFetchSilentError: Error | null;
 	successCounter: number;
 }
 
@@ -18,61 +20,54 @@ export interface FetchStoreValue<T> extends FetchStoreMeta {
 }
 
 export interface FetchStore<T, V> extends StoreReadable<T> {
-	fetch: (...args) => Promise<V>;
-	fetchSilent: (...args) => Promise<V>;
+	fetch: (...args: any[]) => Promise<V>;
+	fetchSilent: (...args: any[]) => Promise<V>;
 	fetchOnce: (args: any[], thresholdMs: number) => Promise<V>;
-	reset: Function;
-	resetError: Function;
+	reset: () => void;
+	resetError: () => void;
 	// for manual hackings
 	getInternalDataStore: () => StoreLike<V>;
 }
 
-interface FetchStoreOptions {
-	logger: (...args) => void;
+interface FetchStoreOptions<T> extends CreateStoreOptions<T> {
 	// still overridable on each call
 	fetchOnceDefaultThresholdMs: number;
-	// central error notifier feature
-	onError: (e) => void;
-	onSilentError: (e) => void;
-	// deprecated
-	afterCreate: (fetchStoreInstance) => void;
 }
-const DEFAULT_OPTIONS: Partial<FetchStoreOptions> = {
+const DEFAULT_OPTIONS: Partial<FetchStoreOptions<any>> = {
 	// 5 min default
 	fetchOnceDefaultThresholdMs: 300_000,
 };
 
-const isFn = (v) => typeof v === 'function';
+const isFn = (v: any) => typeof v === 'function';
 
 type DataFactory<T> = (raw: any, old?: any) => T;
 
 //
 export const createFetchStore = <T>(
-	fetchWorker: (...args) => Promise<any>,
-	initial: T = null,
+	fetchWorker: (...args: any[]) => Promise<any>,
+	initial: T | null = null,
 	dataFactory: null | DataFactory<T> = null,
-	options: Partial<FetchStoreOptions> = null
+	options: Partial<FetchStoreOptions<T>> = {}
 ): FetchStore<FetchStoreValue<T>, T> => {
-	const { logger, onError, onSilentError, afterCreate, fetchOnceDefaultThresholdMs } = {
+	const { fetchOnceDefaultThresholdMs } = {
 		...DEFAULT_OPTIONS,
 		...(options || {}),
 	};
 
-	const _log = (...a) => (isFn(logger) ? logger.apply(null, a) : undefined);
-
 	// always via factory, which keeps door open for various strategies (merge/deepmerge/set/...)
-	const _createData = (data, old?): T =>
-		isFn(dataFactory) ? dataFactory(data, old) : data;
+	const _createData = (data: any, old?: any): T =>
+		isFn(dataFactory) ? dataFactory?.(data, old) : data;
 
 	const _createMetaObj = (): FetchStoreMeta => ({
 		isFetching: false,
 		lastFetchStart: null,
 		lastFetchEnd: null,
 		lastFetchError: null,
+		lastFetchSilentError: null,
 		successCounter: 0,
 	});
 
-	const _dataStore = createStore<T>(_createData(initial));
+	const _dataStore = createStore<T>(_createData(initial), options);
 	const _metaStore = createStore<FetchStoreMeta>(_createMetaObj());
 
 	const { subscribe, get } = createDerivedStore<FetchStoreValue<T>>(
@@ -88,54 +83,47 @@ export const createFetchStore = <T>(
 	// But it still feels a bit hackish...
 	subscribe(() => null);
 
-	const fetch = async (...rest): Promise<T> => {
-		let data = _dataStore.get();
+	const fetch = async (...rest: any[]): Promise<T> => {
 		let meta = _metaStore.get();
 
-		const lastFetchStart = new Date();
-		let lastFetchError = null;
+		meta.isFetching = true;
+		meta.lastFetchStart = new Date();
+		meta.lastFetchEnd = null;
+		meta.lastFetchError = null;
 
-		_metaStore.set({
-			...meta,
-			isFetching: true,
-			lastFetchStart,
-			lastFetchEnd: null,
-			lastFetchError,
-		});
+		_metaStore.set({ ...meta });
 
 		try {
-			data = _createData(await fetchWorker(...rest), data);
+			_dataStore.set(_createData(await fetchWorker(...rest), _dataStore.get()));
 			meta.successCounter++;
 		} catch (e) {
-			lastFetchError = e;
+			meta.lastFetchError = e as any;
+		} finally {
+			meta.isFetching = false;
+			meta.lastFetchEnd = new Date();
 		}
 
-		_dataStore.set(data);
-		_metaStore.set({
-			...meta,
-			isFetching: false,
-			lastFetchStart,
-			lastFetchEnd: new Date(),
-			lastFetchError,
-		});
+		_metaStore.set({ ...meta });
 
-		if (lastFetchError && isFn(onError)) onError(lastFetchError);
-
-		// return fetched content as well...
-		return data;
+		// return fetched (or last) data (for non-subscribe consumption)
+		return _dataStore.get();
 	};
 
 	// similar to fetch, except it does not touch meta... so it allows data update
 	// without fetching spinners (for example)
-	const fetchSilent = async (...rest): Promise<T> => {
-		try {
-			let data = _createData(await fetchWorker(...rest), _dataStore.get());
-			_dataStore.set(data);
-			return data;
-		} catch (e) {
-			_log('silent fetch error', e);
-			if (isFn(onSilentError)) onSilentError(e);
+	const fetchSilent = async (...rest: any[]): Promise<T> => {
+		let meta = _metaStore.get();
+		if (meta.lastFetchSilentError) {
+			_metaStore.set({ ...meta, lastFetchSilentError: null });
 		}
+		try {
+			_dataStore.set(_createData(await fetchWorker(...rest), _dataStore.get()));
+		} catch (e) {
+			_metaStore.set({ ...meta, lastFetchSilentError: e as any });
+		}
+
+		// return fetched (or last) data (for non-subscribe consumption)
+		return _dataStore.get();
 	};
 
 	// use falsey threshold to skip
@@ -160,6 +148,8 @@ export const createFetchStore = <T>(
 		) {
 			return await fetch(...fetchArgs);
 		}
+
+		return _dataStore.get();
 	};
 
 	const reset = () => {
@@ -179,12 +169,6 @@ export const createFetchStore = <T>(
 		resetError,
 		getInternalDataStore: () => _dataStore,
 	};
-
-	// deprecated
-	if (isFn(afterCreate)) {
-		console?.warn?.('`afterCreate` option is deprecated and will be removed');
-		afterCreate(fetchStore);
-	}
 
 	return fetchStore;
 };
