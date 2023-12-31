@@ -20,9 +20,9 @@ export interface FetchStoreValue<T> extends FetchStoreMeta {
 }
 
 export interface FetchStore<T, V> extends StoreReadable<T> {
-	fetch: (...args: any[]) => Promise<V>;
-	fetchSilent: (...args: any[]) => Promise<V>;
-	fetchOnce: (args: any[], thresholdMs: number) => Promise<V>;
+	fetch: (...args: any[]) => Promise<V | null>;
+	fetchSilent: (...args: any[]) => Promise<V | null>;
+	fetchOnce: (args: any[], thresholdMs: number) => Promise<V | null>;
 	reset: () => void;
 	resetError: () => void;
 	// for manual hackings
@@ -83,7 +83,7 @@ export const createFetchStore = <T>(
 	// But it still feels a bit hackish...
 	subscribe(() => null);
 
-	const fetch = async (...rest: any[]): Promise<T> => {
+	const fetch = async (...rest: any[]): Promise<T | null> => {
 		let meta = _metaStore.get();
 
 		meta.isFetching = true;
@@ -106,12 +106,12 @@ export const createFetchStore = <T>(
 		_metaStore.set({ ...meta });
 
 		// return fetched (or last) data (for non-subscribe consumption)
-		return _dataStore.get();
+		return _metaStore.get().lastFetchError ? null : _dataStore.get();
 	};
 
 	// similar to fetch, except it does not touch meta... so it allows data update
 	// without fetching spinners (for example)
-	const fetchSilent = async (...rest: any[]): Promise<T> => {
+	const fetchSilent = async (...rest: any[]): Promise<T | null> => {
 		let meta = _metaStore.get();
 		if (meta.lastFetchSilentError) {
 			_metaStore.set({ ...meta, lastFetchSilentError: null });
@@ -123,14 +123,14 @@ export const createFetchStore = <T>(
 		}
 
 		// return fetched (or last) data (for non-subscribe consumption)
-		return _dataStore.get();
+		return _metaStore.get().lastFetchSilentError ? null : _dataStore.get();
 	};
 
 	// use falsey threshold to skip
 	const fetchOnce = async (
 		fetchArgs: any[] = [],
 		thresholdMs = fetchOnceDefaultThresholdMs
-	): Promise<T> => {
+	): Promise<T | null> => {
 		const { successCounter, isFetching, lastFetchStart } = _metaStore.get();
 
 		if (!Array.isArray(fetchArgs)) fetchArgs = [fetchArgs];

@@ -11,9 +11,9 @@ export interface FetchStoreValue<T> extends FetchStoreMeta {
     data: T;
 }
 export interface FetchStore<T, V> extends StoreReadable<T> {
-    fetch: (...args: any[]) => Promise<V>;
-    fetchSilent: (...args: any[]) => Promise<V>;
-    fetchOnce: (args: any[], thresholdMs: number) => Promise<V>;
+    fetch: (...args: any[]) => Promise<V | null>;
+    fetchSilent: (...args: any[]) => Promise<V | null>;
+    fetchOnce: (args: any[], thresholdMs: number) => Promise<V | null>;
     reset: () => void;
     resetError: () => void;
     getInternalDataStore: () => StoreLike<V>;
