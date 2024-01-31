@@ -13,6 +13,11 @@ export interface FetchStoreMeta {
 	lastFetchError: Error | null;
 	lastFetchSilentError: Error | null;
 	successCounter: number;
+	// if data was changed since the last fetch (or fetchSilent)...
+	// by default it will just strictly compare the raw data value (which is what render frameworks do)
+	// but you can use the `isEqual` option for deep comparisons if needed
+	// in case the isEqual option is not a function this value will be "undefined"
+	hasChangedSinceLastFetch: boolean | undefined;
 }
 
 export interface FetchStoreValue<T> extends FetchStoreMeta {
@@ -32,10 +37,15 @@ export interface FetchStore<T, V> extends StoreReadable<T> {
 interface FetchStoreOptions<T> extends CreateStoreOptions<T> {
 	// still overridable on each call
 	fetchOnceDefaultThresholdMs: number;
+	//
+	isEqual: (previous: T, current: T) => boolean;
 }
 const DEFAULT_OPTIONS: Partial<FetchStoreOptions<any>> = {
 	// 5 min default
 	fetchOnceDefaultThresholdMs: 300_000,
+	// by default, we're just strict comparing the raw value, which may trigger false positives
+	// use custom deep equal comparison fn (eg _.isEqual) if needed
+	isEqual: (previous, current) => previous === current,
 };
 
 const isFn = (v: any) => typeof v === 'function';
@@ -49,7 +59,7 @@ export const createFetchStore = <T>(
 	dataFactory: null | DataFactory<T> = null,
 	options: Partial<FetchStoreOptions<T>> = {}
 ): FetchStore<FetchStoreValue<T>, T> => {
-	const { fetchOnceDefaultThresholdMs } = {
+	const { fetchOnceDefaultThresholdMs, isEqual } = {
 		...DEFAULT_OPTIONS,
 		...(options || {}),
 	};
@@ -65,6 +75,7 @@ export const createFetchStore = <T>(
 		lastFetchError: null,
 		lastFetchSilentError: null,
 		successCounter: 0,
+		hasChangedSinceLastFetch: false,
 	});
 
 	const _dataStore = createStore<T>(_createData(initial), options);
@@ -83,6 +94,17 @@ export const createFetchStore = <T>(
 	// But it still feels a bit hackish...
 	subscribe(() => null);
 
+	// see meta.hasChangedSinceLast
+	let _previousData: T | null = initial;
+
+	const _hasChanged = (current: T) => {
+		let out = undefined;
+		if (typeof isEqual === 'function') out = !isEqual(_previousData as T, current);
+		_previousData = current;
+		return out;
+	};
+
+	//
 	const fetch = async (...rest: any[]): Promise<T | null> => {
 		let meta = _metaStore.get();
 
@@ -103,13 +125,13 @@ export const createFetchStore = <T>(
 			meta.lastFetchEnd = new Date();
 		}
 
-		_metaStore.set({ ...meta });
+		_metaStore.set({ ...meta, hasChangedSinceLastFetch: _hasChanged(_dataStore.get()) });
 
 		// return fetched (or last) data (for non-subscribe consumption)
 		return _metaStore.get().lastFetchError ? null : _dataStore.get();
 	};
 
-	// similar to fetch, except it does not touch meta... so it allows data update
+	// similar to fetch, except it does not touch meta.isFetching... so it allows data update
 	// without fetching spinners (for example)
 	const fetchSilent = async (...rest: any[]): Promise<T | null> => {
 		let meta = _metaStore.get();
@@ -119,8 +141,11 @@ export const createFetchStore = <T>(
 		try {
 			_dataStore.set(_createData(await fetchWorker(...rest), _dataStore.get()));
 		} catch (e) {
-			_metaStore.set({ ...meta, lastFetchSilentError: e as any });
+			meta.lastFetchSilentError = e as any;
 		}
+
+		//
+		_metaStore.set({ ...meta, hasChangedSinceLastFetch: _hasChanged(_dataStore.get()) });
 
 		// return fetched (or last) data (for non-subscribe consumption)
 		return _metaStore.get().lastFetchSilentError ? null : _dataStore.get();

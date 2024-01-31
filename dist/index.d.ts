@@ -6,6 +6,7 @@ export interface FetchStoreMeta {
     lastFetchError: Error | null;
     lastFetchSilentError: Error | null;
     successCounter: number;
+    hasChangedSinceLastFetch: boolean | undefined;
 }
 export interface FetchStoreValue<T> extends FetchStoreMeta {
     data: T;
@@ -20,6 +21,7 @@ export interface FetchStore<T, V> extends StoreReadable<T> {
 }
 interface FetchStoreOptions<T> extends CreateStoreOptions<T> {
     fetchOnceDefaultThresholdMs: number;
+    isEqual: (previous: T, current: T) => boolean;
 }
 type DataFactory<T> = (raw: any, old?: any) => T;
 export declare const createFetchStore: <T>(fetchWorker: (...args: any[]) => Promise<any>, initial?: T | null, dataFactory?: DataFactory<T> | null, options?: Partial<FetchStoreOptions<T>>) => FetchStore<FetchStoreValue<T>, T>;
