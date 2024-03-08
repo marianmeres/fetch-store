@@ -175,7 +175,7 @@ suite.test('internal data store hackings', async () => {
 	assert(s.get().successCounter === 0);
 });
 
-suite.only(
+suite.test(
 	'`hasChangedSinceLastFetch` - default shallow isEqual comparison',
 	async () => {
 		let val = { foo: 'bar' };
@@ -205,7 +205,7 @@ suite.only(
 	}
 );
 
-suite.only('`hasChangedSinceLastFetch` - custom deep isEqual comparison', async () => {
+suite.test('`hasChangedSinceLastFetch` - custom deep isEqual comparison', async () => {
 	let val = { foo: 'bar' };
 	const isEqual = (a: any, b: any) => JSON.stringify(a) === JSON.stringify(b); // naive example
 	const s = createFetchStore<any>(async () => val, val, null, { isEqual });

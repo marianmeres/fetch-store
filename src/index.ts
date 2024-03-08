@@ -193,6 +193,8 @@ export const createFetchStore = <T>(
 		reset,
 		resetError,
 		getInternalDataStore: () => _dataStore,
+		// expose raw worker as well
+		fetchWorker,
 	};
 
 	return fetchStore;
