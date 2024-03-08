@@ -32,6 +32,7 @@ export interface FetchStore<T, V> extends StoreReadable<T> {
 	resetError: () => void;
 	// for manual hackings
 	getInternalDataStore: () => StoreLike<V>;
+	fetchWorker: (...args: any[]) => Promise<any>;
 }
 
 interface FetchStoreOptions<T> extends CreateStoreOptions<T> {
