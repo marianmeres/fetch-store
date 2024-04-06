@@ -27,7 +27,8 @@ export interface FetchStoreValue<T> extends FetchStoreMeta {
 export interface FetchStore<T, V> extends StoreReadable<T> {
 	fetch: (...args: any[]) => Promise<V | null>;
 	fetchSilent: (...args: any[]) => Promise<V | null>;
-	fetchOnce: (args: any[], thresholdMs: number) => Promise<V | null>;
+	fetchOnce: (args?: any[], thresholdMs?: number) => Promise<V | null>;
+	fetchRecursive: (args?: any[], delayMs?: number) => () => void;
 	reset: () => void;
 	resetError: () => void;
 	// for manual hackings
@@ -52,6 +53,8 @@ const DEFAULT_OPTIONS: Partial<FetchStoreOptions<any>> = {
 const isFn = (v: any) => typeof v === 'function';
 
 type DataFactory<T> = (raw: any, old?: any) => T;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 //
 export const createFetchStore = <T>(
@@ -178,6 +181,39 @@ export const createFetchStore = <T>(
 		return _dataStore.get();
 	};
 
+	// a.k.a. polling (if it's "long" or "short" depends on the server)
+	let _timer: any = 0;
+	const fetchRecursive = (fetchArgs: any[] = [], delayMs: number = 500) => {
+		const { isFetching } = _metaStore.get();
+
+		if (!Array.isArray(fetchArgs)) fetchArgs = [fetchArgs];
+
+		// first recursion stop flag special case cleanup
+		if (_timer === -1) _timer = 0;
+
+		// DRY
+		const _delayedFetch = () => {
+			if (_timer > 0) clearTimeout(_timer);
+			_timer = setTimeout(() => {
+				if (_timer !== -1) {
+					fetchRecursive.apply(null, [fetchArgs, delayMs]);
+				}
+			}, delayMs);
+		};
+
+		if (!isFetching) {
+			fetch(...fetchArgs).then(_delayedFetch);
+		} else {
+			_delayedFetch();
+		}
+
+		// return "cancel" control fn
+		return () => {
+			if (_timer) clearTimeout(_timer);
+			else _timer = -1;
+		};
+	};
+
 	const reset = () => {
 		_dataStore.set(_createData(initial));
 		_metaStore.set(_createMetaObj());
@@ -191,6 +227,7 @@ export const createFetchStore = <T>(
 		fetch,
 		fetchSilent,
 		fetchOnce,
+		fetchRecursive,
 		reset,
 		resetError,
 		getInternalDataStore: () => _dataStore,

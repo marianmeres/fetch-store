@@ -1,8 +1,8 @@
-import path from 'node:path';
-import { strict as assert } from 'node:assert';
-import { fileURLToPath } from 'node:url';
 import { createClog } from '@marianmeres/clog';
 import { TestRunner } from '@marianmeres/test-runner';
+import { strict as assert } from 'node:assert';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createFetchStore } from '../src/index.js';
 
 const clog = createClog(path.basename(fileURLToPath(import.meta.url)));
@@ -226,6 +226,45 @@ suite.test('`hasChangedSinceLastFetch` - custom deep isEqual comparison', async 
 	await s.fetch();
 	assert(s.get().data.foo === 'bar');
 	assert(!s.get().hasChangedSinceLastFetch);
+});
+
+suite.test('fetchRecursive basic flow works', async () => {
+	const s = createFetchStore(async () => ({ foo: 'baz' }));
+
+	let _log: any[] = [];
+	const unsub = s.subscribe((o) => {
+		if (o.data && !o.isFetching) {
+			_log.push(o);
+		}
+	});
+
+	const stop = s.fetchRecursive([], 100);
+
+	await sleep(270);
+	stop();
+	unsub();
+	// clog(_log);
+
+	// first | second | third
+	//        sleep       |  stop
+	assert(_log.length === 3);
+});
+
+suite.test('fetchRecursive immediate stop', async () => {
+	const s = createFetchStore(async () => ({ foo: 'baz' }));
+
+	let _log: any[] = [];
+	const unsub = s.subscribe((o) => {
+		if (o.data) _log.push(o);
+	});
+
+	const stop = s.fetchRecursive([], 100);
+
+	stop();
+	unsub();
+
+	// clog(_log);
+	assert(!_log.length);
 });
 
 export default suite;
