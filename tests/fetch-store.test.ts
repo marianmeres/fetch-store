@@ -211,4 +211,85 @@ suite.test('fetchRecursive immediate stop', async () => {
 	assert(!_log.length);
 });
 
+suite.test('fetchStream', async () => {
+	let _aborted = false;
+	let _counter = 0;
+	const s = createFetchStore(async (emit) => {
+		// e.g. do http stream request
+		// on incoming chunks call:
+		await sleep(100);
+		emit('data', ++_counter);
+		await sleep(100);
+		emit('data', ++_counter);
+		// ...
+		await sleep(100);
+		emit('end');
+
+		return () => (_aborted = true);
+	});
+
+	let _log: any[] = [];
+	const unsub = s.subscribe((o) => _log.push(o));
+
+	const stop = await s.fetchStream([]);
+
+	await sleep(350);
+
+	// clog(_log);
+	stop();
+	unsub();
+
+	assert(_aborted);
+
+	// 1 initial, 1 meta stream start, 2 data emits, 1 meta stream end
+	assert(_log.length === 5);
+
+	assert(_log.at(-1).lastFetchStreamEnd - _log.at(-1).lastFetchStreamStart >= 300);
+});
+
+suite.test('fetchStream recursive', async () => {
+	let _aborted = false;
+	let _counter = 0;
+	const s = createFetchStore(async (emit) => {
+		await sleep(50);
+		try {
+			emit('data', ++_counter);
+			emit('data', ++_counter);
+			// throw new Error('sdf');
+			emit('end');
+		} catch (e) {
+			emit('error', e);
+		}
+
+		return () => (_aborted = true);
+	});
+
+	let _log: any = {};
+	const unsub = s.subscribe((o) => {
+		if (o.isStreaming && o.data) {
+			// _log.push(o);
+			let id = `${o.lastFetchStreamStart?.valueOf()}`;
+			_log[id] ??= [];
+			_log[id].push(o.data);
+		}
+	});
+
+	const stop = await s.fetchStream([], 50);
+
+	await sleep(120);
+
+	stop();
+	unsub();
+	// clog(_log);
+
+	const startTimestamps = Object.keys(_log).sort();
+	assert(startTimestamps.length === 2);
+
+	assert(_log[startTimestamps[0]].join() === '1,2');
+
+	// here, the first "2" is a consequence of derivation from two stores ("meta" and "data")
+	// where if meta is updated the derived value is still triggered
+	assert(_log[startTimestamps[1]].join() === '2,3,4');
+});
+
 export default suite;

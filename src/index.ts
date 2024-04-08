@@ -7,28 +7,40 @@ import {
 } from '@marianmeres/store';
 
 export interface FetchStoreMeta {
+	// "normal"
 	isFetching: boolean;
 	lastFetchStart: Date | null;
 	lastFetchEnd: Date | null;
 	lastFetchError: Error | null;
-	lastFetchSilentError: Error | null;
 	successCounter: number;
+	// "silent"
+	lastFetchSilentError: Error | null;
+	// "stream"
+	isStreaming: boolean;
+	lastFetchStreamStart: Date | null;
+	lastFetchStreamEnd: Date | null;
+	lastFetchStreamError: Error | null;
 }
 
 export interface FetchStoreValue<T> extends FetchStoreMeta {
 	data: T;
 }
 
+// type StreamEventHandler = (eventName: string, eventData: any) => void;
+
 export interface FetchStore<T, V> extends StoreReadable<T> {
 	fetch: (...args: any[]) => Promise<V | null>;
 	fetchSilent: (...args: any[]) => Promise<V | null>;
 	fetchOnce: (args?: any[], thresholdMs?: number) => Promise<V | null>;
 	fetchRecursive: (args?: any[], delayMs?: number) => () => void;
+	//
 	reset: () => void;
 	resetError: () => void;
 	// for manual hackings
 	getInternalDataStore: () => StoreLike<V>;
 	fetchWorker: (...args: any[]) => Promise<any>;
+	// experimental
+	fetchStream: (args?: any[], recursiveDelayMs?: number) => Promise<() => void>;
 }
 
 interface FetchStoreOptions<T> extends CreateStoreOptions<T> {
@@ -66,12 +78,19 @@ export const createFetchStore = <T>(
 		isFn(dataFactory) ? dataFactory?.(data, old) : data;
 
 	const _createMetaObj = (): FetchStoreMeta => ({
+		// "normal"
 		isFetching: false,
 		lastFetchStart: null,
 		lastFetchEnd: null,
 		lastFetchError: null,
-		lastFetchSilentError: null,
 		successCounter: 0,
+		// "silent"
+		lastFetchSilentError: null,
+		// "stream"
+		isStreaming: false,
+		lastFetchStreamStart: null,
+		lastFetchStreamEnd: null,
+		lastFetchStreamError: null,
 	});
 
 	const _dataStore = createStore<T>(_createData(initial), options);
@@ -168,40 +187,120 @@ export const createFetchStore = <T>(
 
 	// a.k.a. polling (if it's "long" or "short" depends on the server)
 	// undefined | explicit false | timer id
-	let _timer: any;
+	let _recTimer: any;
 	const fetchRecursive = (fetchArgs: any[] = [], delayMs: number = 500) => {
 		if (!Array.isArray(fetchArgs)) fetchArgs = [fetchArgs];
 		// console.log('-- fetchRecursive --');
 
 		fetchSilent(...fetchArgs).then(() => {
 			// special case stop signal, quit asap
-			if (_timer === false) {
-				return (_timer = undefined);
+			if (_recTimer === false) {
+				return (_recTimer = undefined);
 			}
 
 			// maybe not necessary, since we're already in the planned call, so there is nothing to clear...
-			if (_timer) {
-				clearTimeout(_timer);
-				_timer = undefined;
+			if (_recTimer) {
+				clearTimeout(_recTimer);
+				_recTimer = undefined;
 			}
 
 			//
-			_timer = setTimeout(() => fetchRecursive(fetchArgs, delayMs), delayMs);
+			_recTimer = setTimeout(() => fetchRecursive(fetchArgs, delayMs), delayMs);
 		});
 
 		// return a "cancel" (or "stop") control fn
 		return () => {
 			// if we have a timer, clear it, and reset for future normal use
-			if (_timer) {
-				clearTimeout(_timer);
-				_timer = undefined;
+			if (_recTimer) {
+				clearTimeout(_recTimer);
+				_recTimer = undefined;
 			}
 			// if we dont we are most likely stopping immediately before the first fetch has finished
 			// so set explicit false (as a special case signal) to prevent first recursion
 			else {
-				_timer = false;
+				_recTimer = false;
 			}
 		};
+	};
+
+	// experimental, subject of change
+	let _recStreamTimer: any;
+	const fetchStream = async (fetchArgs: any[] = [], recursiveDelayMs: number = 0) => {
+		if (!Array.isArray(fetchArgs)) fetchArgs = [fetchArgs];
+		// console.log(`--- fetchStream ---`);
+		_metaStore.update((m) => ({
+			...m,
+			isStreaming: true,
+			lastFetchStreamStart: new Date(),
+			lastFetchStreamEnd: null,
+			lastFetchStreamError: null,
+		}));
+
+		let _abortFn: any;
+
+		let _abort = () => {
+			if (typeof _abortFn === 'function') {
+				_abortFn();
+			} else {
+				console.warn(`This is a noop as the fetchWorker did not return a function.`);
+			}
+			if (_recStreamTimer) {
+				clearTimeout(_recStreamTimer);
+				_recStreamTimer = undefined;
+			} else {
+				_recStreamTimer = false;
+			}
+		};
+
+		try {
+			// for streaming, fetchWorker should return an abort fn
+			_abortFn = await fetchWorker((eventName: string, eventData: any) => {
+				eventName = `${eventName || ''}`.toLowerCase();
+				// console.log(`   ---> ${eventName}`);
+
+				if (_metaStore.get().lastFetchStreamError) {
+					_metaStore.update((m) => ({ ...m, lastFetchStreamError: null }));
+				}
+
+				// explicitly whitelisting all 3 known and supported events:
+				// "data", "error", "end"
+
+				//
+				if (eventName === 'data') {
+					_dataStore.set(_createData(eventData, _dataStore.get()));
+				}
+				//
+				else if (eventName === 'error') {
+					_metaStore.update((m) => ({ ...m, lastFetchStreamError: eventData }));
+				}
+				//
+				else if (eventName === 'end') {
+					_metaStore.update((m) => ({
+						...m,
+						isStreaming: false,
+						lastFetchStreamEnd: new Date(),
+					}));
+
+					// maybe recursive?
+					if (recursiveDelayMs > 0) {
+						if (_recStreamTimer === false) {
+							return (_recStreamTimer = undefined);
+						}
+						if (_recStreamTimer) {
+							clearTimeout(_recStreamTimer);
+							_recStreamTimer = undefined;
+						}
+						_recStreamTimer = setTimeout(async () => {
+							_abort = await fetchStream(fetchArgs, recursiveDelayMs);
+						}, recursiveDelayMs);
+					}
+				}
+			}, ...fetchArgs);
+		} catch (e) {
+			_metaStore.update((old) => ({ ...old, lastFetchStreamError: e as any }));
+		}
+
+		return _abort;
 	};
 
 	const reset = () => {
@@ -218,6 +317,7 @@ export const createFetchStore = <T>(
 		fetchSilent,
 		fetchOnce,
 		fetchRecursive,
+		fetchStream,
 		reset,
 		resetError,
 		getInternalDataStore: () => _dataStore,

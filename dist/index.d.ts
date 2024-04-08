@@ -4,8 +4,12 @@ export interface FetchStoreMeta {
     lastFetchStart: Date | null;
     lastFetchEnd: Date | null;
     lastFetchError: Error | null;
-    lastFetchSilentError: Error | null;
     successCounter: number;
+    lastFetchSilentError: Error | null;
+    isStreaming: boolean;
+    lastFetchStreamStart: Date | null;
+    lastFetchStreamEnd: Date | null;
+    lastFetchStreamError: Error | null;
 }
 export interface FetchStoreValue<T> extends FetchStoreMeta {
     data: T;
@@ -19,6 +23,7 @@ export interface FetchStore<T, V> extends StoreReadable<T> {
     resetError: () => void;
     getInternalDataStore: () => StoreLike<V>;
     fetchWorker: (...args: any[]) => Promise<any>;
+    fetchStream: (args?: any[], recursiveDelayMs?: number) => Promise<() => void>;
 }
 interface FetchStoreOptions<T> extends CreateStoreOptions<T> {
     fetchOnceDefaultThresholdMs: number;
