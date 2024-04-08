@@ -13,11 +13,6 @@ export interface FetchStoreMeta {
 	lastFetchError: Error | null;
 	lastFetchSilentError: Error | null;
 	successCounter: number;
-	// if data was changed since the last fetch (or fetchSilent)...
-	// by default it will just strictly compare the raw data value (which is what render frameworks do)
-	// but you can use the `isEqual` option for deep comparisons if needed
-	// in case the isEqual option is not a function this value will be "undefined"
-	hasChangedSinceLastFetch: boolean | undefined;
 }
 
 export interface FetchStoreValue<T> extends FetchStoreMeta {
@@ -54,8 +49,6 @@ const isFn = (v: any) => typeof v === 'function';
 
 type DataFactory<T> = (raw: any, old?: any) => T;
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
 //
 export const createFetchStore = <T>(
 	fetchWorker: (...args: any[]) => Promise<any>,
@@ -79,7 +72,6 @@ export const createFetchStore = <T>(
 		lastFetchError: null,
 		lastFetchSilentError: null,
 		successCounter: 0,
-		hasChangedSinceLastFetch: false,
 	});
 
 	const _dataStore = createStore<T>(_createData(initial), options);
@@ -97,16 +89,6 @@ export const createFetchStore = <T>(
 	//     s.get().data === 'something which fetchWorker returned'
 	// But it still feels a bit hackish...
 	subscribe(() => null);
-
-	// see meta.hasChangedSinceLast
-	let _previousData: T | null = initial;
-
-	const _hasChanged = (current: T) => {
-		let out = undefined;
-		if (typeof isEqual === 'function') out = !isEqual(_previousData as T, current);
-		_previousData = current;
-		return out;
-	};
 
 	//
 	const fetch = async (...rest: any[]): Promise<T | null> => {
@@ -129,7 +111,7 @@ export const createFetchStore = <T>(
 			meta.lastFetchEnd = new Date();
 		}
 
-		_metaStore.set({ ...meta, hasChangedSinceLastFetch: _hasChanged(_dataStore.get()) });
+		_metaStore.set({ ...meta });
 
 		// return fetched (or last) data (for non-subscribe consumption)
 		return _metaStore.get().lastFetchError ? null : _dataStore.get();
@@ -139,17 +121,20 @@ export const createFetchStore = <T>(
 	// without fetching spinners (for example)
 	const fetchSilent = async (...rest: any[]): Promise<T | null> => {
 		let meta = _metaStore.get();
+		let _metaChange = 0;
 		if (meta.lastFetchSilentError) {
 			_metaStore.set({ ...meta, lastFetchSilentError: null });
+			_metaChange++;
 		}
 		try {
 			_dataStore.set(_createData(await fetchWorker(...rest), _dataStore.get()));
 		} catch (e) {
 			meta.lastFetchSilentError = e as any;
+			_metaChange++;
 		}
 
 		//
-		_metaStore.set({ ...meta, hasChangedSinceLastFetch: _hasChanged(_dataStore.get()) });
+		if (_metaChange) _metaStore.set({ ...meta });
 
 		// return fetched (or last) data (for non-subscribe consumption)
 		return _metaStore.get().lastFetchSilentError ? null : _dataStore.get();
@@ -182,40 +167,38 @@ export const createFetchStore = <T>(
 	};
 
 	// a.k.a. polling (if it's "long" or "short" depends on the server)
-	let _timer: any = 0;
+	// undefined | explicit false | timer id
+	let _timer: any;
 	const fetchRecursive = (fetchArgs: any[] = [], delayMs: number = 500) => {
-		const { isFetching } = _metaStore.get();
-
 		if (!Array.isArray(fetchArgs)) fetchArgs = [fetchArgs];
+		// console.log('-- fetchRecursive --');
 
-		// first recursion stop flag special case cleanup
-		if (_timer === -1) _timer = 0;
+		fetchSilent(...fetchArgs).then(() => {
+			//
+			if (_timer === false) {
+				return (_timer = undefined);
+			}
 
-		// DRY
-		const _delayedFetch = () => {
-			if (_timer > 0) clearTimeout(_timer);
-			_timer = setTimeout(() => {
-				if (_timer !== -1) {
-					fetchRecursive(fetchArgs, delayMs);
-				}
-			}, delayMs);
-		};
-
-		if (!isFetching) {
-			fetch(...fetchArgs).then(_delayedFetch);
-		} else {
-			_delayedFetch();
-		}
-
-		// return "cancel" (or "stop") control fn
-		return () => {
+			// maybe not necessary...
 			if (_timer) {
 				clearTimeout(_timer);
-				_timer = 0;
+				_timer = undefined;
 			}
-			// special case when canceling before starting (to stop the first recursive call)
+			//
+			_timer = setTimeout(() => fetchRecursive(fetchArgs, delayMs), delayMs);
+		});
+
+		// return a "cancel" (or "stop") control fn
+		return () => {
+			// if we have a timer, clear it, and reset for future normal use
+			if (_timer) {
+				clearTimeout(_timer);
+				_timer = undefined;
+			}
+			// if we dont we are most likely stopping immediately before the first fetch has finished
+			// so set explicit false (as a special case signal)
 			else {
-				_timer = -1;
+				_timer = false;
 			}
 		};
 	};

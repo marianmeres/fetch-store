@@ -175,88 +175,32 @@ suite.test('internal data store hackings', async () => {
 	assert(s.get().successCounter === 0);
 });
 
-suite.test(
-	'`hasChangedSinceLastFetch` - default shallow isEqual comparison',
-	async () => {
-		let val = { foo: 'bar' };
-		const s = createFetchStore<any>(async () => val, val);
-
-		await s.fetch();
-		assert(s.get().data.foo === 'bar');
-		// initial fetch has not changed, since we've provided initial value to factory
-		assert(!s.get().hasChangedSinceLastFetch);
-
-		// now second fetch must have also not changed
-		await s.fetch();
-		assert(s.get().data.foo === 'bar');
-		assert(!s.get().hasChangedSinceLastFetch);
-
-		// now we change the value instance, so the it must be reported as changed
-		val = { ...val };
-		await s.fetch();
-		assert(s.get().data.foo === 'bar'); // altough bar has not changed
-		assert(s.get().hasChangedSinceLastFetch);
-
-		// now we change the foo value within the same instance, so it must not see the change
-		val.foo = 'baz';
-		await s.fetch();
-		assert(s.get().data.foo === 'baz'); // altough bar is now baz
-		assert(!s.get().hasChangedSinceLastFetch);
-	}
-);
-
-suite.test('`hasChangedSinceLastFetch` - custom deep isEqual comparison', async () => {
-	let val = { foo: 'bar' };
-	const isEqual = (a: any, b: any) => JSON.stringify(a) === JSON.stringify(b); // naive example
-	const s = createFetchStore<any>(async () => val, val, null, { isEqual });
-
-	await s.fetch();
-	assert(s.get().data.foo === 'bar');
-	// initial fetch has not changed, since we've provided initial value to factory
-	assert(!s.get().hasChangedSinceLastFetch);
-
-	// now second fetch must have also not changed
-	await s.fetch();
-	assert(s.get().data.foo === 'bar');
-	assert(!s.get().hasChangedSinceLastFetch);
-
-	// now we change the value instance, but it must NOT be reported as changed since
-	// we're comparing just the serialized output
-	val = { ...val };
-	await s.fetch();
-	assert(s.get().data.foo === 'bar');
-	assert(!s.get().hasChangedSinceLastFetch);
-});
-
 suite.test('fetchRecursive basic flow works', async () => {
-	const s = createFetchStore(async () => ({ foo: 'baz' }));
+	let _counter = 0;
+	const s = createFetchStore(async () => ++_counter);
 
 	let _log: any[] = [];
-	const unsub = s.subscribe((o) => {
-		if (o.data && !o.isFetching) {
-			_log.push(o);
-		}
-	});
+	const unsub = s.subscribe((o) => o.data && _log.push(o));
 
-	const stop = s.fetchRecursive([], 100);
+	const stop = s.fetchRecursive([], 50);
 
-	await sleep(270);
+	await sleep(110);
 	stop();
 	unsub();
 	// clog(_log);
 
-	// first | second | third
-	//        sleep       |  stop
+	// first (the initial subscribe)
+	// second poll | third poll
+	//       sleep     |  stop
 	assert(_log.length === 3);
 });
 
 suite.test('fetchRecursive immediate stop', async () => {
-	const s = createFetchStore(async () => ({ foo: 'baz' }));
+	let _counter = 0;
+	const s = createFetchStore(async () => ++_counter);
 
 	let _log: any[] = [];
-	const unsub = s.subscribe((o) => {
-		if (o.data) _log.push(o);
-	});
+	const unsub = s.subscribe((o) => o.data && _log.push(o));
 
 	const stop = s.fetchRecursive([], 100);
 

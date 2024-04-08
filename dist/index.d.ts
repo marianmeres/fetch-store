@@ -6,7 +6,6 @@ export interface FetchStoreMeta {
     lastFetchError: Error | null;
     lastFetchSilentError: Error | null;
     successCounter: number;
-    hasChangedSinceLastFetch: boolean | undefined;
 }
 export interface FetchStoreValue<T> extends FetchStoreMeta {
     data: T;
