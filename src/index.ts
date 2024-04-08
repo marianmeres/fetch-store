@@ -174,16 +174,17 @@ export const createFetchStore = <T>(
 		// console.log('-- fetchRecursive --');
 
 		fetchSilent(...fetchArgs).then(() => {
-			//
+			// special case stop signal, quit asap
 			if (_timer === false) {
 				return (_timer = undefined);
 			}
 
-			// maybe not necessary...
+			// maybe not necessary, since we're already in the planned call, so there is nothing to clear...
 			if (_timer) {
 				clearTimeout(_timer);
 				_timer = undefined;
 			}
+
 			//
 			_timer = setTimeout(() => fetchRecursive(fetchArgs, delayMs), delayMs);
 		});
@@ -196,7 +197,7 @@ export const createFetchStore = <T>(
 				_timer = undefined;
 			}
 			// if we dont we are most likely stopping immediately before the first fetch has finished
-			// so set explicit false (as a special case signal)
+			// so set explicit false (as a special case signal) to prevent first recursion
 			else {
 				_timer = false;
 			}
