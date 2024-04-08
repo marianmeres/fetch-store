@@ -196,7 +196,7 @@ export const createFetchStore = <T>(
 			if (_timer > 0) clearTimeout(_timer);
 			_timer = setTimeout(() => {
 				if (_timer !== -1) {
-					fetchRecursive.apply(null, [fetchArgs, delayMs]);
+					fetchRecursive(fetchArgs, delayMs);
 				}
 			}, delayMs);
 		};
@@ -207,10 +207,16 @@ export const createFetchStore = <T>(
 			_delayedFetch();
 		}
 
-		// return "cancel" control fn
+		// return "cancel" (or "stop") control fn
 		return () => {
-			if (_timer) clearTimeout(_timer);
-			else _timer = -1;
+			if (_timer) {
+				clearTimeout(_timer);
+				_timer = 0;
+			}
+			// special case when canceling before starting (to stop the first recursive call)
+			else {
+				_timer = -1;
+			}
 		};
 	};
 
