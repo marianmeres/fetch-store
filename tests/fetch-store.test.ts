@@ -3,7 +3,7 @@ import { TestRunner } from '@marianmeres/test-runner';
 import { strict as assert } from 'node:assert';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createFetchStore } from '../src/index.js';
+import { createFetchStore, createFetchStreamStore } from '../src/index.js';
 
 const clog = createClog(path.basename(fileURLToPath(import.meta.url)));
 const suite = new TestRunner(path.basename(fileURLToPath(import.meta.url)));
@@ -214,16 +214,18 @@ suite.test('fetchRecursive immediate stop', async () => {
 suite.test('fetchStream', async () => {
 	let _aborted = false;
 	let _counter = 0;
-	const s = createFetchStore(async (emit) => {
-		// e.g. do http stream request
-		// on incoming chunks call:
-		await sleep(100);
-		emit('data', ++_counter);
-		await sleep(100);
-		emit('data', ++_counter);
-		// ...
-		await sleep(100);
-		emit('end');
+	const s = createFetchStreamStore((emit, fetchArgs) => {
+		let _times = 3;
+		new Promise(async (resolve) => {
+			while (--_times) {
+				if (_aborted) break;
+				await sleep(50);
+				if (_aborted) break;
+				emit('data', ++_counter);
+			}
+			emit('end');
+			resolve(void 0);
+		});
 
 		return () => (_aborted = true);
 	});
@@ -231,9 +233,9 @@ suite.test('fetchStream', async () => {
 	let _log: any[] = [];
 	const unsub = s.subscribe((o) => _log.push(o));
 
-	const stop = await s.fetchStream([]);
+	const stop = s.fetchStream();
 
-	await sleep(350);
+	await sleep(120);
 
 	// clog(_log);
 	stop();
@@ -244,52 +246,60 @@ suite.test('fetchStream', async () => {
 	// 1 initial, 1 meta stream start, 2 data emits, 1 meta stream end
 	assert(_log.length === 5);
 
-	assert(_log.at(-1).lastFetchStreamEnd - _log.at(-1).lastFetchStreamStart >= 300);
+	//
+	assert(_log.at(-1).lastFetchEnd - _log.at(-1).lastFetchStart >= 100); // 2 * 50
 });
 
 suite.test('fetchStream recursive', async () => {
 	let _aborted = false;
 	let _counter = 0;
-	const s = createFetchStore(async (emit) => {
-		await sleep(50);
-		try {
-			emit('data', ++_counter);
-			emit('data', ++_counter);
-			// throw new Error('sdf');
-			emit('end');
-		} catch (e) {
-			emit('error', e);
-		}
 
+	const s = createFetchStreamStore((emit, fetchArgs) => {
+		let _times = 3;
+		new Promise(async (resolve) => {
+			while (--_times) {
+				await sleep(10);
+				if (_aborted) break;
+				emit('data', ++_counter);
+				// clog(_counter);
+			}
+			emit('end');
+			// clog('end', Date.now());
+			return resolve(void 0);
+		});
 		return () => (_aborted = true);
 	});
 
 	let _log: any = {};
 	const unsub = s.subscribe((o) => {
-		if (o.isStreaming && o.data) {
-			// _log.push(o);
-			let id = `${o.lastFetchStreamStart?.valueOf()}`;
+		// clog(o);
+		if (o.isFetching && o.lastFetchStart && o.data) {
+			let id = o.lastFetchStart.valueOf();
 			_log[id] ??= [];
 			_log[id].push(o.data);
 		}
 	});
 
-	const stop = await s.fetchStream([], 50);
+	const stop = s.fetchStream([], 1);
 
-	await sleep(120);
+	// set some more than 3 x 2 x 10
+	await sleep(200);
+	// clog(_slept);
 
 	stop();
 	unsub();
 	// clog(_log);
 
 	const startTimestamps = Object.keys(_log).sort();
-	assert(startTimestamps.length === 2);
+	assert(startTimestamps.length > 3);
 
+	// check first 3
 	assert(_log[startTimestamps[0]].join() === '1,2');
-
 	// here, the first "2" is a consequence of derivation from two stores ("meta" and "data")
 	// where if meta is updated the derived value is still triggered
 	assert(_log[startTimestamps[1]].join() === '2,3,4');
+	assert(_log[startTimestamps[2]].join() === '4,5,6');
+	// ...
 });
 
 export default suite;

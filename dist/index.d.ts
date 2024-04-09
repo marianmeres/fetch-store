@@ -1,4 +1,5 @@
 import { CreateStoreOptions, StoreLike, StoreReadable } from '@marianmeres/store';
+export { createFetchStreamStore } from './fetch-stream-store.js';
 export interface FetchStoreMeta {
     isFetching: boolean;
     lastFetchStart: Date | null;
@@ -6,10 +7,6 @@ export interface FetchStoreMeta {
     lastFetchError: Error | null;
     successCounter: number;
     lastFetchSilentError: Error | null;
-    isStreaming: boolean;
-    lastFetchStreamStart: Date | null;
-    lastFetchStreamEnd: Date | null;
-    lastFetchStreamError: Error | null;
 }
 export interface FetchStoreValue<T> extends FetchStoreMeta {
     data: T;
@@ -23,12 +20,9 @@ export interface FetchStore<T, V> extends StoreReadable<T> {
     resetError: () => void;
     getInternalDataStore: () => StoreLike<V>;
     fetchWorker: (...args: any[]) => Promise<any>;
-    fetchStream: (args?: any[], recursiveDelayMs?: number) => Promise<() => void>;
 }
 interface FetchStoreOptions<T> extends CreateStoreOptions<T> {
     fetchOnceDefaultThresholdMs: number;
-    isEqual: (previous: T, current: T) => boolean;
 }
-type DataFactory<T> = (raw: any, old?: any) => T;
+export type DataFactory<T> = (raw: any, old?: any) => T;
 export declare const createFetchStore: <T>(fetchWorker: (...args: any[]) => Promise<any>, initial?: T | null, dataFactory?: DataFactory<T> | null, options?: Partial<FetchStoreOptions<T>>) => FetchStore<FetchStoreValue<T>, T>;
-export {};
