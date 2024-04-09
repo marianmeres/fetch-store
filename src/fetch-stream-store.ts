@@ -86,6 +86,20 @@ export const createFetchStreamStore = <T>(
 	) => {
 		let _timer: any;
 		let _aborted = false;
+		let _abortFn: any;
+
+		// must be hoisted so the recursive calls are cancelled properly
+		let _abort = () => {
+			// prettier-ignore
+			if (typeof _abortFn === 'function') {
+				_abortFn();
+			} else {
+				console.warn('`abort` is a noop (the fetchStreamWorker did not return a function).');
+			}
+
+			if (_timer) clearTimeout(_timer);
+			_aborted = true;
+		};
 
 		// inner worker (maybe recursive)
 		const _fetchStream = (
@@ -104,8 +118,6 @@ export const createFetchStreamStore = <T>(
 				lastFetchEnd: null,
 				lastFetchError: null,
 			}));
-
-			let _abortFn: any;
 
 			try {
 				_abortFn = fetchStreamWorker(
@@ -132,10 +144,11 @@ export const createFetchStreamStore = <T>(
 							// maybe recursive?
 							if (delay > 0 && !_aborted) {
 								if (_timer) clearTimeout(_timer);
-								_timer = setTimeout(
-									() => !_aborted && _fetchStream(fetchArgs, delay),
-									delay
-								);
+								_timer = setTimeout(() => {
+									if (!_aborted) {
+										_abort = _fetchStream(fetchArgs, recursiveDelayMs);
+									}
+								}, delay);
 							}
 						}
 					},
@@ -145,17 +158,7 @@ export const createFetchStreamStore = <T>(
 				_metaStore.update((old) => ({ ...old, lastFetchError: e as any }));
 			}
 
-			return () => {
-				// prettier-ignore
-				if (typeof _abortFn === 'function') {
-					_abortFn();
-				} else {
-					console.warn('`abort` is a noop (the fetchStreamWorker did not return a function).');
-				}
-
-				if (_timer) clearTimeout(_timer);
-				_aborted = true;
-			};
+			return _abort;
 		};
 
 		return _fetchStream(fetchArgs, recursiveDelayMs);

@@ -280,7 +280,7 @@ suite.test('fetchStream recursive', async () => {
 		}
 	});
 
-	const stop = s.fetchStream([], 1);
+	const stop = s.fetchStream([], 10);
 
 	// set some more than 3 x 2 x 10
 	await sleep(200);

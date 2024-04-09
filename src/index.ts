@@ -189,7 +189,10 @@ export const createFetchStore = <T>(
 			fetchSilent(...fetchArgs).then(() => {
 				if (_timer) clearTimeout(_timer);
 				if (delay > 0 && !_aborted) {
-					_timer = setTimeout(() => !_aborted && fetchRecursive(fetchArgs, delay), delay);
+					_timer = setTimeout(
+						() => !_aborted && fetchRecursive(fetchArgs, delayMs),
+						delay
+					);
 				}
 			});
 
