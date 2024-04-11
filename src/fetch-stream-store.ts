@@ -20,6 +20,7 @@ export interface FetchStreamStoreMeta {
 interface FetchStreamStoreOptions<T> extends CreateStoreOptions<T> {
 	// still overridable on each call
 	// fetchOnceDefaultThresholdMs: number;
+	onReset: () => void;
 }
 
 type FetchStreamEventName = 'data' | 'error' | 'end';
@@ -167,6 +168,7 @@ export const createFetchStreamStore = <T>(
 	const reset = () => {
 		_dataStore.set(_createData(initial));
 		_metaStore.set(_createMetaObj());
+		if (typeof options.onReset === 'function') options.onReset();
 	};
 
 	const resetError = () => _metaStore.update((old) => ({ ...old, lastFetchError: null }));

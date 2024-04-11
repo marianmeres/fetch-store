@@ -7,6 +7,7 @@ export interface FetchStreamStoreMeta {
     lastFetchError: Error | null;
 }
 interface FetchStreamStoreOptions<T> extends CreateStoreOptions<T> {
+    onReset: () => void;
 }
 type FetchStreamEventName = 'data' | 'error' | 'end';
 type FetchStreamEventEmitFn = (eventName: FetchStreamEventName, eventData: any) => () => void;

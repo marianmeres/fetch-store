@@ -40,6 +40,7 @@ export interface FetchStore<T, V> extends StoreReadable<T> {
 interface FetchStoreOptions<T> extends CreateStoreOptions<T> {
 	// still overridable on each call
 	fetchOnceDefaultThresholdMs: number;
+	onReset: () => void;
 }
 const DEFAULT_OPTIONS: Partial<FetchStoreOptions<any>> = {
 	// 5 min default
@@ -209,6 +210,7 @@ export const createFetchStore = <T>(
 	const reset = () => {
 		_dataStore.set(_createData(initial));
 		_metaStore.set(_createMetaObj());
+		if (typeof options.onReset === 'function') options.onReset();
 	};
 
 	const resetError = () => _metaStore.update((old) => ({ ...old, lastFetchError: null }));
