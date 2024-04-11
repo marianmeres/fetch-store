@@ -1,6 +1,6 @@
 {
 	"name": "@marianmeres/fetch-store",
-	"version": "2.8.1",
+	"version": "2.9.0",
 	"description": "",
 	"type": "module",
 	"main": "./dist/index.cjs",
