@@ -73,14 +73,6 @@ export const createFetchStreamStore = <T>(
 		([data, meta]) => ({ data, ...meta })
 	);
 
-	// In this fetch store case, we want at least one subscription to always exist,
-	// because we want this ugly-non-store-like-practice to work (note no outer subscription):
-	//     const s = createFetchStore(...)
-	//     await s.fetch();
-	//     s.get().data === 'something which fetchWorker returned'
-	// But it still feels a bit hackish...
-	subscribe(() => null);
-
 	const fetchStream = (
 		fetchArgs: any[] = [],
 		recursiveDelayMs: number | (() => number) = 0
