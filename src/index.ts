@@ -28,6 +28,7 @@ export interface FetchStore<T, V> extends StoreReadable<T> {
 	fetch: (...args: any[]) => Promise<V | null>;
 	fetchSilent: (...args: any[]) => Promise<V | null>;
 	fetchOnce: (args?: any[], thresholdMs?: number) => Promise<V | null>;
+	fetchOnceSilent: (args?: any[], thresholdMs?: number) => Promise<V | null>;
 	fetchRecursive: (args?: any[], delayMs?: number) => () => void;
 	//
 	reset: () => void;
@@ -153,8 +154,8 @@ export const createFetchStore = <T>(
 		});
 	};
 
-	// use falsey threshold to skip
-	const fetchOnce = async (
+	const _fetchOnce = async (
+		isSilent: boolean,
 		fetchArgs: any[] = [],
 		thresholdMs = fetchOnceDefaultThresholdMs
 	): Promise<T | null> => {
@@ -163,7 +164,7 @@ export const createFetchStore = <T>(
 		if (!Array.isArray(fetchArgs)) fetchArgs = [fetchArgs];
 
 		if (!successCounter && !isFetching) {
-			return await fetch(...fetchArgs);
+			return isSilent ? await fetchSilent(...fetchArgs) : await fetch(...fetchArgs);
 		}
 
 		// expired threshold?
@@ -173,10 +174,25 @@ export const createFetchStore = <T>(
 			lastFetchStart &&
 			Date.now() - new Date(lastFetchStart).valueOf() > thresholdMs
 		) {
-			return await fetch(...fetchArgs);
+			return isSilent ? await fetchSilent(...fetchArgs) : await fetch(...fetchArgs);
 		}
 
 		return _dataStore.get();
+	};
+
+	// use falsey threshold to skip
+	const fetchOnce = async (
+		fetchArgs: any[] = [],
+		thresholdMs = fetchOnceDefaultThresholdMs
+	): Promise<T | null> => {
+		return await _fetchOnce(false, fetchArgs, thresholdMs);
+	};
+
+	const fetchOnceSilent = async (
+		fetchArgs: any[] = [],
+		thresholdMs = fetchOnceDefaultThresholdMs
+	): Promise<T | null> => {
+		return await _fetchOnce(true, fetchArgs, thresholdMs);
 	};
 
 	// a.k.a. polling (if it's "long" or "short" depends on the server)
@@ -230,6 +246,7 @@ export const createFetchStore = <T>(
 		fetch,
 		fetchSilent,
 		fetchOnce,
+		fetchOnceSilent,
 		fetchRecursive,
 		reset,
 		resetError,

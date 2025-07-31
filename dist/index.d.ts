@@ -15,6 +15,7 @@ export interface FetchStore<T, V> extends StoreReadable<T> {
     fetch: (...args: any[]) => Promise<V | null>;
     fetchSilent: (...args: any[]) => Promise<V | null>;
     fetchOnce: (args?: any[], thresholdMs?: number) => Promise<V | null>;
+    fetchOnceSilent: (args?: any[], thresholdMs?: number) => Promise<V | null>;
     fetchRecursive: (args?: any[], delayMs?: number) => () => void;
     reset: () => void;
     resetError: () => void;
