@@ -20,6 +20,7 @@ export interface FetchStore<T, V> extends StoreReadable<T> {
     resetError: () => void;
     getInternalDataStore: () => StoreLike<V>;
     fetchWorker: (...args: any[]) => Promise<any>;
+    touch: (data?: V) => void;
 }
 interface FetchStoreOptions<T> extends CreateStoreOptions<T> {
     fetchOnceDefaultThresholdMs: number;

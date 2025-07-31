@@ -157,7 +157,40 @@ suite.test('fetch once works', async () => {
 	await s.fetchOnce([null], 2); // ignored
 
 	assert(result === 2);
+	assert(counter === 2);
 	assert(s.get().successCounter === 2);
+
+	await sleep(10);
+
+	// now hack the internal timer, so it thinks it just fetched
+	s.touch();
+
+	// these must be no-op
+	await s.fetchOnce([null], 5);
+	await s.fetchOnce([null], 5);
+	await s.fetchOnce([null], 5);
+
+	// these stay unchanged
+	assert(result === 2);
+	assert(counter === 2);
+
+	// only successCounter is increased (the touch increases it)
+	assert(s.get().successCounter === 3);
+
+	// now again, slightly different
+	await sleep(6); // reset
+	s.getInternalDataStore().set({ counter: 123 });
+	assert(s.get().data.counter === 123);
+
+	// now fetchingOnce will resume the counter (the 123 is trashed)
+	await s.fetchOnce([null], 5);
+	assert(s.get().data.counter === 3);
+
+	// but not if we do the same with touch...
+	await sleep(6); // reset
+	s.touch({ counter: 123 }); // by touching the internal clock we trick the fetchOnce below
+	await s.fetchOnce([null], 5);
+	assert(s.get().data.counter === 123); // THIS IS THE THING: counter IS NOT 3 as above
 
 	unsub();
 });

@@ -35,6 +35,7 @@ export interface FetchStore<T, V> extends StoreReadable<T> {
 	// for manual hackings
 	getInternalDataStore: () => StoreLike<V>;
 	fetchWorker: (...args: any[]) => Promise<any>;
+	touch: (data?: V) => void;
 }
 
 interface FetchStoreOptions<T> extends CreateStoreOptions<T> {
@@ -65,7 +66,7 @@ export const createFetchStore = <T>(
 
 	// always via factory, which keeps door open for various strategies (merge/deepmerge/set/...)
 	const _createData = (data: any, old?: any): T =>
-		isFn(dataFactory) ? dataFactory?.(data, old) : data;
+		isFn(dataFactory) ? (dataFactory as any)?.(data, old) : data;
 
 	const _createMetaObj = (): FetchStoreMeta => ({
 		// "normal"
@@ -134,6 +135,22 @@ export const createFetchStore = <T>(
 
 		// return fetched (or last) data (for non-subscribe consumption)
 		return _metaStore.get().lastFetchSilentError ? null : _dataStore.get();
+	};
+
+	/** Basically just setting the internal `lastXYZ` timestamps to now, so the fetchOnce
+	 * will be tricked. Useful for cache-hackings from the outside*/
+	const touch = (data?: T) => {
+		if (data) {
+			_dataStore.set(data);
+		}
+		let meta = _metaStore.get();
+		const now = new Date();
+		_metaStore.set({
+			...meta,
+			lastFetchStart: now,
+			lastFetchEnd: now,
+			successCounter: meta.successCounter + 1,
+		});
 	};
 
 	// use falsey threshold to skip
@@ -217,6 +234,7 @@ export const createFetchStore = <T>(
 		reset,
 		resetError,
 		getInternalDataStore: () => _dataStore,
+		touch,
 		// expose raw worker as well
 		fetchWorker,
 	};
