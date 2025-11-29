@@ -64,54 +64,6 @@ const { data, isFetching, lastFetchError } = userStore.get();
 - **Abort support** - Cancel in-flight requests with AbortController integration
 - **Stream support** - Handle SSE, WebSocket, or push-based data sources
 
-## Abortable Requests
-
-Enable automatic request cancellation when a new fetch starts:
-
-```typescript
-import { createFetchStore } from "@marianmeres/fetch-store";
-
-const searchStore = createFetchStore(
-    async (query: string, signal: AbortSignal) => {
-        const response = await fetch(`/api/search?q=${query}`, { signal });
-        if (!response.ok) throw new Error("Search failed");
-        return await response.json();
-    },
-    null,
-    null,
-    { abortable: true }
-);
-
-// Rapid calls - each new fetch aborts the previous one
-searchStore.fetch("h");      // Aborted
-searchStore.fetch("he");     // Aborted
-searchStore.fetch("hel");    // Aborted
-searchStore.fetch("hello");  // This one completes
-
-// Manual abort
-searchStore.abort();
-```
-
-## Request Deduplication
-
-Prevent duplicate requests when multiple calls happen while one is in-flight:
-
-```typescript
-const userStore = createFetchStore(
-    async (userId) => fetch(`/api/users/${userId}`).then(r => r.json()),
-    null,
-    null,
-    { dedupeInflight: true }
-);
-
-// These all return the same promise (only one HTTP request is made)
-const p1 = userStore.fetch("123");
-const p2 = userStore.fetch("123");
-const p3 = userStore.fetch("123");
-
-p1 === p2 && p2 === p3; // true
-```
-
 ## Streaming Data
 
 For streaming data sources, use `createFetchStreamStore`:
@@ -144,81 +96,9 @@ const stop = sseStore.fetchStream(["/api/events"], 5000);
 stop();
 ```
 
-## Breaking Changes (v3.0.0)
-
-This major release includes the following breaking changes:
-
-### Simplified Generic Types
-
-The `FetchStore<T>` and `FetchStreamStore<T>` interfaces have been simplified from a
-two-generic pattern to a single generic:
-
-```typescript
-// Before (v2.x)
-interface FetchStore<T, V = T extends FetchStoreValue<infer D> ? D : T> { ... }
-
-// After (v3.x)
-interface FetchStore<T> extends StoreReadable<FetchStoreValue<T>> { ... }
-```
-
-**Migration:** If you were using explicit generic parameters, simply use the data type
-directly: `FetchStore<User>` instead of `FetchStore<FetchStoreValue<User>, User>`.
-
-### Simplified API Signature
-
-The `createFetchStore` and `createFetchStreamStore` functions now have a simpler signature.
-The `dataFactory` parameter has been moved into the `options` object:
-
-```typescript
-// Before (v2.x)
-createFetchStore(fetchWorker, initial, dataFactory, options)
-
-// After (v3.x)
-createFetchStore(fetchWorker, initial, options)
-// dataFactory is now in options: { dataFactory: (data, old) => transformedData }
-```
-
-**Migration:** Move your `dataFactory` from the third parameter into the options object:
-
-```typescript
-// Before
-const store = createFetchStore(
-    async () => fetchData(),
-    null,
-    (data, old) => ({ ...old, ...data }),
-    { dedupeInflight: true }
-);
-
-// After
-const store = createFetchStore(
-    async () => fetchData(),
-    null,
-    {
-        dataFactory: (data, old) => ({ ...old, ...data }),
-        dedupeInflight: true
-    }
-);
-```
-
-### DataFactory Type Change
-
-The `DataFactory<T>` type now receives properly typed data instead of `unknown`:
-
-```typescript
-// Before (v2.x)
-type DataFactory<T> = (raw: any, old?: T) => T;
-
-// After (v3.x)
-type DataFactory<T> = (data: T, old?: T) => T;
-```
-
-The `fetchWorker` must now return `Promise<T>` directly, making the types consistent
-throughout the API.
-
-
 ## API Reference
 
-### `createFetchStore<T>(fetchWorker, initial?, options?)`
+### `createFetchStore<T>(fetchWorker, initial?, dataFactory?, options?)`
 
 Creates a reactive store for async fetch operations.
 
@@ -226,8 +106,9 @@ Creates a reactive store for async fetch operations.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `fetchWorker` | `(...args) => Promise<T>` | required | Async function performing the fetch. Must return data of type T. When `abortable: true`, receives `AbortSignal` as the last argument. |
+| `fetchWorker` | `(...args) => Promise<unknown>` | required | Async function performing the fetch. When `abortable: true`, receives `AbortSignal` as the last argument. |
 | `initial` | `T \| null` | `null` | Initial data value |
+| `dataFactory` | `(raw, old?) => T` | `null` | Transform fetched data (useful for merge strategies) |
 | `options` | `FetchStoreOptions<T>` | `{}` | Configuration options |
 
 **Options:**
@@ -237,7 +118,6 @@ Creates a reactive store for async fetch operations.
 | `fetchOnceDefaultThresholdMs` | `number` | `300000` | Default threshold (5 min) for `fetchOnce` before allowing re-fetch |
 | `dedupeInflight` | `boolean` | `false` | If true, concurrent `fetch()` calls return the same promise |
 | `abortable` | `boolean` | `false` | If true, creates AbortController for each fetch, aborting previous requests |
-| `dataFactory` | `(data: T, old?: T) => T` | - | Transform fetched data (useful for merge strategies) |
 | `onReset` | `() => void` | - | Callback invoked when `reset()` is called |
 
 **Returns:** `FetchStore<T>`
@@ -265,7 +145,7 @@ The store value contains both data and metadata:
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `data` | `T \| null` | The fetched data (null before first fetch or after reset) |
+| `data` | `T` | The fetched data |
 | `isFetching` | `boolean` | Whether a fetch is in progress |
 | `lastFetchStart` | `Date \| null` | When the last fetch started |
 | `lastFetchEnd` | `Date \| null` | When the last fetch completed |
@@ -273,7 +153,7 @@ The store value contains both data and metadata:
 | `lastFetchSilentError` | `Error \| null` | Error from the last silent fetch, if any |
 | `successCounter` | `number` | Number of successful fetches |
 
-### `createFetchStreamStore<T>(fetchStreamWorker, initial?, options?)`
+### `createFetchStreamStore<T>(fetchStreamWorker, initial?, dataFactory?, options?)`
 
 Creates a reactive store for streaming data sources.
 
@@ -281,16 +161,10 @@ Creates a reactive store for streaming data sources.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `fetchStreamWorker` | `(emit, ...args) => (() => void) \| void` | required | Worker receiving emit callback for events. Emit receives data of type T. Should return cleanup function. |
+| `fetchStreamWorker` | `(emit, ...args) => (() => void) \| void` | required | Worker receiving emit callback for events. Should return cleanup function. |
 | `initial` | `T \| null` | `null` | Initial data value |
+| `dataFactory` | `(raw, old?) => T` | `null` | Transform received data |
 | `options` | `FetchStreamStoreOptions<T>` | `{}` | Configuration options |
-
-**Options:**
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `dataFactory` | `(data: T, old?: T) => T` | - | Transform received data (useful for merge strategies) |
-| `onReset` | `() => void` | - | Callback invoked when `reset()` is called |
 
 **Emit Events:**
 - `emit("data", value)` - Push new data

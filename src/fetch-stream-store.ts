@@ -1,154 +1,156 @@
-import {
-	CreateStoreOptions,
-	StoreLike,
-	StoreReadable,
-	createDerivedStore,
-	createStore,
-} from '@marianmeres/store';
-import { DataFactory, FetchStoreValue } from './index.js';
+import { createDerivedStore, createStore } from "@marianmeres/store";
 
-const isFn = (v: any) => typeof v === 'function';
+// Re-export types for backwards compatibility
+export type {
+	FetchStreamEventEmitFn,
+	FetchStreamEventName,
+	FetchStreamStore,
+	FetchStreamStoreMeta,
+	FetchStreamStoreOptions,
+	FetchStreamStoreValue,
+} from "./types.ts";
 
-export interface FetchStreamStoreMeta {
-	// "stream"
-	isFetching: boolean;
-	lastFetchStart: Date | null;
-	lastFetchEnd: Date | null;
-	lastFetchError: Error | null;
-}
+import type {
+	FetchStreamEventName,
+	FetchStreamStore,
+	FetchStreamStoreMeta,
+	FetchStreamStoreOptions,
+	FetchStreamStoreValue,
+} from "./types.ts";
 
-interface FetchStreamStoreOptions<T> extends CreateStoreOptions<T> {
-	// still overridable on each call
-	// fetchOnceDefaultThresholdMs: number;
-	onReset: () => void;
-}
+const DEFAULT_OPTIONS: Partial<FetchStreamStoreOptions<unknown>> = {};
 
-type FetchStreamEventName = 'data' | 'error' | 'end';
-
-type FetchStreamEventEmitFn = (
-	eventName: FetchStreamEventName,
-	eventData: any
-) => () => void;
-
-export interface FetchStreamStore<T, V> extends StoreReadable<T> {
-	//
-	fetchStream: (args?: any[], recursiveDelayMs?: number | (() => number)) => () => void;
-	//
-	fetchStreamWorker: (emit: FetchStreamEventEmitFn, ...args: any[]) => any;
-	//
-	reset: () => void;
-	resetError: () => void;
-	// for manual hackings
-	getInternalDataStore: () => StoreLike<V>;
-}
-
-const DEFAULT_OPTIONS = {};
-
-//
+/**
+ * Creates a reactive store for handling streaming data sources like SSE, WebSocket,
+ * or any push-based data pattern.
+ *
+ * @template T - The type of data the store will hold
+ * @param fetchStreamWorker - Worker function that receives an emit callback for sending events.
+ *   The emit callback receives data of type T. Should return a cleanup/abort function, or void
+ *   if no cleanup is needed.
+ * @param initial - Initial data value (default: null)
+ * @param options - Configuration options including optional dataFactory for merge strategies
+ * @returns A FetchStreamStore instance with reactive subscription and stream control
+ *
+ * @example
+ * ```ts
+ * const sseStore = createFetchStreamStore<Message>((emit, url) => {
+ *   const eventSource = new EventSource(url);
+ *   eventSource.onmessage = (e) => emit("data", JSON.parse(e.data));
+ *   eventSource.onerror = (e) => emit("error", e);
+ *   return () => eventSource.close();
+ * });
+ *
+ * const stop = sseStore.fetchStream(["/api/events"]);
+ * // Later: stop() to close the connection
+ * ```
+ */
 export const createFetchStreamStore = <T>(
-	fetchStreamWorker: (...args: any[]) => () => void,
+	fetchStreamWorker: (
+		emit: (eventName: FetchStreamEventName, eventData?: T | Error) => void,
+		...args: unknown[]
+	) => (() => void) | void,
 	initial: T | null = null,
-	dataFactory: null | DataFactory<T> = null,
 	options: Partial<FetchStreamStoreOptions<T>> = {}
-) => {
-	options = { ...DEFAULT_OPTIONS, ...(options || {}) };
+): FetchStreamStore<T> => {
+	const mergedOptions = { ...DEFAULT_OPTIONS, ...options };
+	const dataFactory = options.dataFactory;
 
-	// always via factory, which keeps door open for various strategies (merge/deepmerge/set/...)
-	const _createData = (data: any, old?: any): T =>
-		isFn(dataFactory) ? dataFactory?.(data, old) : data;
+	// Use factory for data transformation strategies (merge/deepmerge/set/...)
+	const _createData = (data: T, old: T | null): T =>
+		typeof dataFactory === "function" ? dataFactory(data, old ?? undefined) : data;
 
 	const _createMetaObj = (): FetchStreamStoreMeta => ({
-		// "stream"
 		isFetching: false,
 		lastFetchStart: null,
 		lastFetchEnd: null,
 		lastFetchError: null,
 	});
 
-	const _dataStore = createStore<T>(_createData(initial), options);
+	const _dataStore = createStore<T | null>(initial);
 	const _metaStore = createStore<FetchStreamStoreMeta>(_createMetaObj());
 
-	const { subscribe, get } = createDerivedStore<FetchStoreValue<T>>(
+	const { subscribe, get } = createDerivedStore<FetchStreamStoreValue<T>>(
 		[_dataStore, _metaStore],
 		([data, meta]) => ({ data, ...meta })
 	);
 
 	const fetchStream = (
-		fetchArgs: any[] = [],
+		fetchArgs: unknown[] = [],
 		recursiveDelayMs: number | (() => number) = 0
-	) => {
-		let _timer: any;
+	): (() => void) => {
+		let _timer: ReturnType<typeof setTimeout> | undefined;
 		let _aborted = false;
-		let _abortFn: any;
+		let _abortFn: (() => void) | void;
 
-		// must be hoisted so the recursive calls are cancelled properly
-		let _abort = () => {
-			// prettier-ignore
-			if (typeof _abortFn === 'function') {
+		// Must be hoisted so recursive calls can be cancelled properly
+		let _abort = (): void => {
+			if (typeof _abortFn === "function") {
 				_abortFn();
 			} else {
-				console.warn('`abort` is a noop (the fetchStreamWorker did not return a function).');
+				console.warn(
+					"`abort` is a noop (the fetchStreamWorker did not return a function)."
+				);
 			}
 
 			if (_timer) clearTimeout(_timer);
 			_aborted = true;
 		};
 
-		// inner worker (maybe recursive)
+		// Inner worker (maybe recursive)
 		const _fetchStream = (
-			fetchArgs: any[] = [],
-			recursiveDelayMs: number | (() => number) = 0
-		) => {
-			if (!Array.isArray(fetchArgs)) fetchArgs = [fetchArgs];
-			const delay = isFn(recursiveDelayMs)
-				? (recursiveDelayMs as any)()
-				: recursiveDelayMs;
+			args: unknown[] = [],
+			delayMs: number | (() => number) = 0
+		): (() => void) => {
+			const normalizedArgs = Array.isArray(args) ? args : [args];
+			const delay = typeof delayMs === "function" ? delayMs() : delayMs;
 
-			_metaStore.update((m) => ({
-				...m,
+			_metaStore.set({
+				..._metaStore.get(),
 				isFetching: true,
 				lastFetchStart: new Date(),
 				lastFetchEnd: null,
 				lastFetchError: null,
-			}));
+			});
 
 			try {
 				_abortFn = fetchStreamWorker(
-					(eventName: FetchStreamEventName, eventData: any) => {
+					(eventName: FetchStreamEventName, eventData?: T | Error): void => {
 						if (_metaStore.get().lastFetchError) {
-							_metaStore.update((m) => ({ ...m, lastFetchError: null }));
+							_metaStore.set({ ..._metaStore.get(), lastFetchError: null });
 						}
-						//
-						if (eventName === 'data') {
+
+						if (eventName === "data" && eventData !== undefined && !(eventData instanceof Error)) {
 							_dataStore.set(_createData(eventData, _dataStore.get()));
-						}
-						//
-						else if (eventName === 'error') {
-							_metaStore.update((m) => ({ ...m, lastFetchError: eventData }));
-						}
-						//
-						else if (eventName === 'end') {
-							_metaStore.update((m) => ({
-								...m,
+						} else if (eventName === "error") {
+							const error =
+								eventData instanceof Error
+									? eventData
+									: new Error(String(eventData));
+							_metaStore.set({ ..._metaStore.get(), lastFetchError: error });
+						} else if (eventName === "end") {
+							_metaStore.set({
+								..._metaStore.get(),
 								isFetching: false,
 								lastFetchEnd: new Date(),
-							}));
+							});
 
-							// maybe recursive?
-							if (delay > 0 && !_aborted) {
+							// Maybe recursive?
+							if ((delay as number) > 0 && !_aborted) {
 								if (_timer) clearTimeout(_timer);
 								_timer = setTimeout(() => {
 									if (!_aborted) {
-										_abort = _fetchStream(fetchArgs, recursiveDelayMs);
+										_abort = _fetchStream(normalizedArgs, delayMs);
 									}
-								}, delay);
+								}, delay as number);
 							}
 						}
 					},
-					...fetchArgs
+					...normalizedArgs
 				);
 			} catch (e) {
-				_metaStore.update((old) => ({ ...old, lastFetchError: e as any }));
+				const error = e instanceof Error ? e : new Error(String(e));
+				_metaStore.set({ ..._metaStore.get(), lastFetchError: error });
 			}
 
 			return _abort;
@@ -157,13 +159,15 @@ export const createFetchStreamStore = <T>(
 		return _fetchStream(fetchArgs, recursiveDelayMs);
 	};
 
-	const reset = () => {
-		_dataStore.set(_createData(initial));
+	const reset = (): void => {
+		_dataStore.set(initial);
 		_metaStore.set(_createMetaObj());
-		if (typeof options.onReset === 'function') options.onReset();
+		if (typeof mergedOptions.onReset === "function") mergedOptions.onReset();
 	};
 
-	const resetError = () => _metaStore.update((old) => ({ ...old, lastFetchError: null }));
+	const resetError = (): void => {
+		_metaStore.update((old) => ({ ...old, lastFetchError: null }));
+	};
 
 	return {
 		subscribe,
@@ -172,7 +176,7 @@ export const createFetchStreamStore = <T>(
 		reset,
 		resetError,
 		getInternalDataStore: () => _dataStore,
-		// expose raw worker as well
+		// Expose raw worker as well
 		fetchStreamWorker,
 	};
 };
