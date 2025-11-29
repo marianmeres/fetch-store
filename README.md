@@ -7,10 +7,10 @@ for Svelte-compatible reactivity but works with any framework.
 ## Install
 
 ```shell
-# Deno
 deno add jsr:@marianmeres/fetch-store
+```
 
-# npm
+```shell
 npm i @marianmeres/fetch-store
 ```
 
