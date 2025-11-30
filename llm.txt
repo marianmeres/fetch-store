@@ -1,0 +1,205 @@
+# @marianmeres/fetch-store - LLM Context Document
+
+## Quick Reference
+
+Package: @marianmeres/fetch-store
+Version: 3.0.1
+Author: Marian Meres
+License: MIT
+Repository: https://github.com/marianmeres/fetch-store
+Runtime: Deno-first, dual distribution (Deno + NPM)
+
+## Purpose
+
+Reactive store utility for managing async fetch operations with built-in state tracking for loading, errors, and success counts. Svelte-compatible reactivity but framework-agnostic.
+
+## Dependencies
+
+- @marianmeres/store@^2.2.0 (reactive store primitive)
+- @marianmeres/pubsub@^2.2.0 (included via store)
+
+## File Structure
+
+```
+src/
+├── mod.ts              - Main export barrel (11 lines)
+├── types.ts            - Type definitions (240 lines)
+├── fetch-store.ts      - FetchStore implementation (366 lines)
+└── fetch-stream-store.ts - Streaming store (183 lines)
+tests/
+└── fetch-store.test.ts - Tests (563 lines)
+```
+
+## Exports
+
+### Functions
+
+1. createFetchStore<T>(fetchWorker, initial?, options?) => FetchStore<T>
+2. createFetchStreamStore<T>(fetchStreamWorker, initial?, options?) => FetchStreamStore<T>
+
+### Types
+
+- DataFactory<T> = (data: T, old?: T) => T
+- FetchMetaBase { isFetching, lastFetchStart, lastFetchEnd, lastFetchError }
+- FetchStoreMeta extends FetchMetaBase { successCounter, lastFetchSilentError }
+- FetchStreamStoreMeta = FetchMetaBase
+- FetchStoreValue<T> extends FetchStoreMeta { data: T | null }
+- FetchStreamStoreValue<T> extends FetchStreamStoreMeta { data: T | null }
+- FetchStore<T> extends StoreReadable<FetchStoreValue<T>>
+- FetchStreamStore<T> extends StoreReadable<FetchStreamStoreValue<T>>
+- FetchStoreOptions<T> { fetchOnceDefaultThresholdMs, dedupeInflight, abortable, dataFactory, onReset }
+- FetchStreamStoreOptions<T> { dataFactory, onReset }
+- FetchStreamEventName = "data" | "error" | "end"
+- FetchStreamEventEmitFn = (eventName, eventData?) => void
+
+## FetchStore API
+
+### Methods
+
+| Method | Purpose |
+|--------|---------|
+| subscribe(fn) | Svelte-compatible subscription, returns unsubscribe |
+| get() | Get current FetchStoreValue synchronously |
+| fetch(...args) | Async fetch with isFetching=true |
+| fetchSilent(...args) | Fetch without loading indicator |
+| fetchOnce(args?, thresholdMs?) | Fetch only if cache expired |
+| fetchOnceSilent(args?, thresholdMs?) | Silent cached fetch |
+| fetchRecursive(args?, delayMs?) | Polling, returns stop fn |
+| reset() | Full reset to initial state |
+| resetError() | Clear lastFetchError only |
+| touch(data?) | Update timestamps, optionally set data |
+| abort() | Cancel in-flight (requires abortable: true) |
+| getInternalDataStore() | Access underlying data store |
+
+### Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| fetchOnceDefaultThresholdMs | number | 300000 | Cache threshold (5 min) |
+| dedupeInflight | boolean | false | Return same promise for concurrent calls |
+| abortable | boolean | false | Enable AbortController |
+| dataFactory | (data, old?) => T | - | Transform/merge data |
+| onReset | () => void | - | Reset callback |
+
+## FetchStreamStore API
+
+### Methods
+
+| Method | Purpose |
+|--------|---------|
+| subscribe(fn) | Svelte-compatible subscription |
+| get() | Get current value |
+| fetchStream(args?, recursiveDelayMs?) | Start stream, returns stop fn |
+| reset() | Reset to initial |
+| resetError() | Clear error only |
+| getInternalDataStore() | Access underlying store |
+
+### Emit Events
+
+- emit("data", value) - Push new data
+- emit("error", error) - Report error
+- emit("end") - Signal completion (triggers auto-restart if delay > 0)
+
+## Architecture
+
+### Two-Store Pattern
+
+FetchStore uses internal separation:
+- _dataStore: holds T data
+- _metaStore: holds metadata (timestamps, errors, counters)
+- _derivedStore: combines both into FetchStoreValue<T>
+
+### Deduplication
+
+When dedupeInflight=true:
+- Stores _inflightPromise reference
+- Concurrent fetch() calls return same promise
+- Separate tracking for silent vs normal fetches
+
+### Abort Handling
+
+When abortable=true:
+- New AbortController per fetch
+- Previous request auto-aborted
+- AbortSignal passed as last arg to fetchWorker
+- AbortError NOT stored in lastFetchError
+
+### FetchOnce Logic
+
+Cache hit conditions (returns cached data):
+1. successCounter > 0
+2. isFetching === false
+3. time since lastFetchStart < threshold
+
+## Usage Patterns
+
+### Basic Fetch
+```typescript
+const store = createFetchStore(fetchFn);
+await store.fetch(arg1, arg2);
+const { data, isFetching, lastFetchError } = store.get();
+```
+
+### Svelte Component
+```svelte
+{#if $store.isFetching}<Spinner />
+{:else if $store.lastFetchError}<Error error={$store.lastFetchError} />
+{:else}<Content data={$store.data} />
+{/if}
+```
+
+### Polling
+```typescript
+const stop = store.fetchRecursive([url], 30000);
+stop(); // Stop polling
+```
+
+### Merge Strategy
+```typescript
+const store = createFetchStore(fetchFn, null, {
+  dataFactory: (newData, oldData) => ({ ...oldData, ...newData })
+});
+```
+
+### Abortable Search
+```typescript
+const store = createFetchStore(
+  async (query, signal) => fetch(`/api/search?q=${query}`, { signal }),
+  null,
+  { abortable: true }
+);
+```
+
+### WebSocket Stream
+```typescript
+const store = createFetchStreamStore((emit, url) => {
+  const ws = new WebSocket(url);
+  ws.onmessage = (e) => emit("data", JSON.parse(e.data));
+  ws.onerror = (e) => emit("error", e);
+  return () => ws.close();
+});
+const stop = store.fetchStream([wsUrl], 5000);
+```
+
+## Version History
+
+### v3.0.0 Breaking Changes
+1. Simplified generics: FetchStore<T> instead of FetchStore<T, V>
+2. dataFactory moved from 3rd param to options
+3. dataFactory receives typed T instead of unknown
+4. fetchWorker must return Promise<T>
+
+## Testing
+
+- Framework: Deno test
+- Coverage: 63 tests across 9 categories
+- Categories: basic flow, subscription, data transformation, fetchOnce caching, polling, streaming, deduplication, abort control, reset/cleanup
+
+## Commands
+
+```bash
+deno task test     # Run tests
+deno task check    # Type check
+deno task lint     # Lint
+deno task build    # Build NPM package
+```

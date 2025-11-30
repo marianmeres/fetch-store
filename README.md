@@ -309,3 +309,10 @@ Creates a reactive store for streaming data sources.
 | `reset` | `() => void` | Reset store to initial state |
 | `resetError` | `() => void` | Clear `lastFetchError` only |
 | `getInternalDataStore` | `() => StoreLike<T>` | Access internal data store |
+
+## Package Identity
+
+- **Name:** @marianmeres/fetch-store
+- **Author:** Marian Meres
+- **Repository:** https://github.com/marianmeres/fetch-store
+- **License:** MIT
