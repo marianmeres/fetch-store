@@ -1,5 +1,8 @@
 # @marianmeres/fetch-store
 
+[![NPM version](https://img.shields.io/npm/v/@marianmeres/fetch-store)](https://www.npmjs.com/package/@marianmeres/fetch-store)
+[![JSR version](https://jsr.io/badges/@marianmeres/fetch-store)](https://jsr.io/@marianmeres/fetch-store)
+
 A reactive [store](https://github.com/marianmeres/store) utility for managing async fetch
 operations with built-in state tracking for loading, errors, and success counts. Designed
 for Svelte-compatible reactivity but works with any framework.
