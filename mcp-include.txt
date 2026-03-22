@@ -1,0 +1,1 @@
+Reactive store for async fetch operations with loading/error/success state tracking, caching, polling, request deduplication, abort support, and streaming (SSE, WebSocket). Svelte-compatible but framework-agnostic.
