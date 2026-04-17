@@ -220,8 +220,16 @@ Deno.test(
 		let _counter = 0;
 		const s = createFetchStore(async () => ++_counter);
 
+		// Count one entry per actual fetch (silent fetches now bump successCounter,
+		// so we dedupe subscriber fires via the counter rather than raw notifications).
 		const _log: any[] = [];
-		const unsub = s.subscribe((o) => o.data && _log.push(o));
+		let _lastSuccess = 0;
+		const unsub = s.subscribe((o) => {
+			if (o.data && o.successCounter !== _lastSuccess) {
+				_lastSuccess = o.successCounter;
+				_log.push(o);
+			}
+		});
 
 		const stop = s.fetchRecursive([], 50);
 
@@ -558,5 +566,279 @@ Deno.test(
 		assert((signalRef as AbortSignal).aborted, "reset should abort in-flight request");
 		assertEquals(s.get().data, null);
 		assertEquals(s.get().successCounter, 0);
+	}
+);
+
+// ---- A1: aborted fetch must reset isFetching ----
+
+Deno.test(
+	{ name: "A1: manual abort clears isFetching", sanitizeResources: false, sanitizeOps: false },
+	async () => {
+	const s = createFetchStore(
+		async (...args: unknown[]) => {
+			const signal = args[0] as AbortSignal;
+			await sleep(100);
+			signal.throwIfAborted();
+			return { done: true };
+		},
+		null,
+		{ abortable: true }
+	);
+
+	const p = s.fetch();
+	await sleep(10);
+	assert(s.get().isFetching, "isFetching should be true mid-flight");
+
+	s.abort();
+	await p;
+
+	assertEquals(s.get().isFetching, false, "isFetching must be cleared after abort");
+	assertEquals(s.get().lastFetchError, null, "abort should not set lastFetchError");
+	assert(s.get().lastFetchEnd !== null, "lastFetchEnd must be set after abort");
+	}
+);
+
+// ---- A2: fetchSilent updates timestamps + successCounter so fetchOnceSilent caches ----
+
+Deno.test("A2: fetchSilent advances lastFetchStart and successCounter", async () => {
+	let calls = 0;
+	const s = createFetchStore(async () => {
+		calls++;
+		return { v: calls };
+	});
+
+	await s.fetchSilent();
+
+	assert(s.get().lastFetchStart !== null, "silent fetch sets lastFetchStart");
+	assert(s.get().lastFetchEnd !== null, "silent fetch sets lastFetchEnd");
+	assertEquals(s.get().successCounter, 1, "silent fetch bumps successCounter");
+	// isFetching must remain false — the whole point of "silent"
+	assertEquals(s.get().isFetching, false);
+});
+
+Deno.test("A2: fetchOnceSilent caches within threshold", async () => {
+	let calls = 0;
+	const s = createFetchStore(async () => ({ v: ++calls }));
+
+	await s.fetchOnceSilent([], 300_000);
+	await s.fetchOnceSilent([], 300_000);
+	await s.fetchOnceSilent([], 300_000);
+
+	assertEquals(calls, 1, "threshold must prevent re-fetch");
+	assertEquals(s.get().successCounter, 1);
+});
+
+Deno.test("A2: fetchOnceSilent refetches after threshold expires", async () => {
+	let calls = 0;
+	const s = createFetchStore(async () => ({ v: ++calls }));
+
+	await s.fetchOnceSilent([], 2);
+	await sleep(5);
+	await s.fetchOnceSilent([], 2);
+
+	assertEquals(calls, 2);
+});
+
+// ---- A3: FetchStreamStore.reset must stop the running stream ----
+
+Deno.test(
+	{ name: "A3: stream reset stops the worker", sanitizeResources: false, sanitizeOps: false },
+	async () => {
+		let _stopped = false;
+		const s = createFetchStreamStore((emit) => {
+			(async () => {
+				// never emits "end"
+				while (!_stopped) {
+					await sleep(20);
+					if (!_stopped) emit("data", Math.random());
+				}
+			})();
+			return () => {
+				_stopped = true;
+			};
+		});
+
+		s.fetchStream();
+		await sleep(50);
+
+		assert(!_stopped, "stream should still be running");
+
+		s.reset();
+
+		assert(_stopped, "reset() must invoke the worker cleanup function");
+		assertEquals(s.get().data, null);
+		assertEquals(s.get().isFetching, false);
+	}
+);
+
+// ---- A4: emit("end") must not wipe a prior error ----
+
+Deno.test(
+	{ name: "A4: error then end preserves lastFetchError", sanitizeResources: false, sanitizeOps: false },
+	async () => {
+		const s = createFetchStreamStore((emit) => {
+			(async () => {
+				await sleep(5);
+				emit("error", new Error("boom"));
+				emit("end");
+			})();
+			return () => {};
+		});
+
+		const stop = s.fetchStream();
+		await sleep(30);
+		stop();
+
+		assert(s.get().lastFetchError, "lastFetchError must survive a following end event");
+		assertEquals(s.get().lastFetchError?.message, "boom");
+		assertEquals(s.get().isFetching, false);
+	}
+);
+
+// ---- A5: stream worker that throws synchronously must not leave isFetching stuck ----
+
+Deno.test("A5: synchronous worker throw resets isFetching", () => {
+	const s = createFetchStreamStore(() => {
+		throw new Error("sync fail");
+	});
+
+	s.fetchStream();
+
+	assertEquals(s.get().isFetching, false, "sync throw must reset isFetching");
+	assert(s.get().lastFetchError, "sync throw must be captured as error");
+	assertEquals(s.get().lastFetchError?.message, "sync fail");
+});
+
+// ---- A6: reset during a non-abortable in-flight fetch must not be overwritten ----
+
+Deno.test(
+	{ name: "A6: reset wins over a late non-abortable response", sanitizeResources: false, sanitizeOps: false },
+	async () => {
+		const s = createFetchStore(async () => {
+			await sleep(50);
+			return { v: 42 };
+		});
+
+		const p = s.fetch();
+		await sleep(10);
+		s.reset();
+
+		await p;
+
+		assertEquals(s.get().data, null, "reset state must not be overwritten by late response");
+		assertEquals(s.get().successCounter, 0);
+		assertEquals(s.get().isFetching, false);
+	}
+);
+
+// ---- A7: fetchOnce must join an in-flight request instead of returning stale data ----
+
+Deno.test(
+	{ name: "A7: fetchOnce joins in-flight fetch", sanitizeResources: false, sanitizeOps: false },
+	async () => {
+		let calls = 0;
+		const s = createFetchStore(async () => {
+			calls++;
+			await sleep(50);
+			return { v: calls };
+		});
+
+		const p1 = s.fetch();
+		await sleep(5);
+		// At this point isFetching=true and data is still null.
+		// Old behavior returned null immediately. New behavior must join p1.
+		const p2 = s.fetchOnce();
+
+		const [r1, r2] = await Promise.all([p1, p2]);
+
+		assertEquals(calls, 1, "only one fetch should have run");
+		assertEquals((r1 as any).v, 1);
+		assertEquals((r2 as any).v, 1);
+	}
+);
+
+// ---- C3: concurrent fetchOnce calls must dedupe to a single fetch ----
+
+Deno.test("C3: concurrent fetchOnce on a cold store dedupes", async () => {
+	let calls = 0;
+	const s = createFetchStore(async () => {
+		calls++;
+		await sleep(20);
+		return { v: calls };
+	});
+
+	const [a, b, c] = await Promise.all([
+		s.fetchOnce(),
+		s.fetchOnce(),
+		s.fetchOnce(),
+	]);
+
+	assertEquals(calls, 1, "cold concurrent fetchOnce must dedupe");
+	assertEquals((a as any).v, 1);
+	assertEquals((b as any).v, 1);
+	assertEquals((c as any).v, 1);
+});
+
+// ---- C6: stream worker emits after stop() are ignored ----
+
+Deno.test(
+	{ name: "C6: emit after stop() is ignored", sanitizeResources: false, sanitizeOps: false },
+	async () => {
+		let rogueEmit: ((name: any, data?: any) => void) | null = null;
+
+		const s = createFetchStreamStore((emit) => {
+			rogueEmit = emit;
+			return () => {};
+		});
+
+		const stop = s.fetchStream();
+		stop();
+
+		// Simulate an ill-behaved worker that keeps emitting after cancel.
+		rogueEmit!("data", { leak: true });
+		rogueEmit!("error", new Error("ignored"));
+
+		assertEquals(s.get().data, null, "post-stop data emit must be ignored");
+		assertEquals(s.get().lastFetchError, null, "post-stop error emit must be ignored");
+	}
+);
+
+// ---- Argument-type inference (B2) ----
+
+Deno.test("B2: worker argument types are inferred on fetch/fetchSilent", async () => {
+	const s = createFetchStore(async (id: string, n: number) => ({ id, n }));
+
+	// If the generic A did not propagate, these calls would still typecheck as
+	// `unknown[]` — but compile-time checking at least ensures the inferred
+	// arity matches. Runtime behavior is the real assertion here.
+	const r = await s.fetch("abc", 7);
+	assertEquals(r?.id, "abc");
+	assertEquals(r?.n, 7);
+
+	const r2 = await s.fetchSilent("xyz", 2);
+	assertEquals(r2?.id, "xyz");
+});
+
+// ---- Recursive polling can now use non-silent fetch (C5) ----
+
+Deno.test(
+	{ name: "C5: fetchRecursive with silent:false flips isFetching", sanitizeResources: false, sanitizeOps: false },
+	async () => {
+		let flips = 0;
+		const s = createFetchStore(async () => {
+			await sleep(10);
+			return { v: 1 };
+		});
+
+		const unsub = s.subscribe((v) => {
+			if (v.isFetching) flips++;
+		});
+
+		const stop = s.fetchRecursive([], 30, { silent: false });
+		await sleep(80);
+		stop();
+		unsub();
+
+		assert(flips >= 2, `expected visible isFetching flips, got ${flips}`);
 	}
 );

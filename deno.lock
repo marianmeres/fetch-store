@@ -1,32 +1,32 @@
 {
   "version": "5",
   "specifiers": {
-    "jsr:@marianmeres/pubsub@^2.4.5": "2.4.5",
-    "jsr:@marianmeres/store@^2.4.3": "2.4.3",
-    "jsr:@std/assert@^1.0.17": "1.0.17",
-    "jsr:@std/fs@^1.0.22": "1.0.22",
+    "jsr:@marianmeres/pubsub@3": "3.0.0",
+    "jsr:@marianmeres/store@3": "3.0.0",
+    "jsr:@std/assert@^1.0.19": "1.0.19",
+    "jsr:@std/fs@^1.0.23": "1.0.23",
     "jsr:@std/internal@^1.0.12": "1.0.12",
     "jsr:@std/path@^1.1.4": "1.1.4",
     "npm:@types/node@*": "24.2.0"
   },
   "jsr": {
-    "@marianmeres/pubsub@2.4.5": {
-      "integrity": "9050392e5bcbf5fb0210e2c61fcfa7bb23c9e7ca3d9c43f5d16033f53ba0d130"
+    "@marianmeres/pubsub@3.0.0": {
+      "integrity": "9bc40e60362801663fb23e0c00a353abec7684840b6bea410facba09c083677b"
     },
-    "@marianmeres/store@2.4.3": {
-      "integrity": "b1e95e6018d2033123e3c8d301c268a54e0f0cfa2f712bcc563ce34ccba83ead",
+    "@marianmeres/store@3.0.0": {
+      "integrity": "cf848628bf2a39532426c3e37f865ab6307d7e8b3e53603cf86abb77554363e7",
       "dependencies": [
         "jsr:@marianmeres/pubsub"
       ]
     },
-    "@std/assert@1.0.17": {
-      "integrity": "df5ebfffe77c03b3fa1401e11c762cc8f603d51021c56c4d15a8c7ab45e90dbe",
+    "@std/assert@1.0.19": {
+      "integrity": "eaada96ee120cb980bc47e040f82814d786fe8162ecc53c91d8df60b8755991e",
       "dependencies": [
         "jsr:@std/internal"
       ]
     },
-    "@std/fs@1.0.22": {
-      "integrity": "de0f277a58a867147a8a01bc1b181d0dfa80bfddba8c9cf2bacd6747bcec9308",
+    "@std/fs@1.0.23": {
+      "integrity": "3ecbae4ce4fee03b180fa710caff36bb5adb66631c46a6460aaad49515565a37",
       "dependencies": [
         "jsr:@std/internal",
         "jsr:@std/path"
@@ -55,10 +55,10 @@
   },
   "workspace": {
     "dependencies": [
-      "jsr:@marianmeres/pubsub@^2.4.5",
-      "jsr:@marianmeres/store@^2.4.3",
-      "jsr:@std/assert@^1.0.17",
-      "jsr:@std/fs@^1.0.22",
+      "jsr:@marianmeres/pubsub@3",
+      "jsr:@marianmeres/store@3",
+      "jsr:@std/assert@^1.0.19",
+      "jsr:@std/fs@^1.0.23",
       "jsr:@std/path@^1.1.4"
     ]
   }
